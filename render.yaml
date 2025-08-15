@@ -11,8 +11,9 @@ services:
       - key: DATABASE_URL
         sync: false
 
-  - type: static
+  - type: web
     name: donorconnect-frontend
+    env: static
     repo: https://github.com/MUKUL-PRASAD-SIGH/DonorConnect
     branch: main
     rootDir: frontend
