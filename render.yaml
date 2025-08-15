@@ -12,6 +12,7 @@ services:
         sync: false
 
   - type: web
+  plan: starter
     name: donorconnect-frontend
     env: static
     repo: https://github.com/MUKUL-PRASAD-SIGH/DonorConnect
