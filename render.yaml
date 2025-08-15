@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: donorconnect-backend
+    env: node
+    repo: https://github.com/MUKUL-PRASAD-SIGH/DonorConnect
+    branch: main
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+
+  - type: static
+    name: donorconnect-frontend
+    repo: https://github.com/MUKUL-PRASAD-SIGH/DonorConnect
+    branch: main
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: build
