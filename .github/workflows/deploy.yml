@@ -22,35 +22,25 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v3
       with:
-        node-version: '18'
+        node-version: '20'
         cache: 'npm'
-        cache-dependency-path: |
-          backend/package-lock.json
-          frontend/package-lock.json
-    
-    - name: Install Backend Dependencies
-      run: |
-        cd backend
-        npm ci
-    
-    - name: Install Frontend Dependencies
-      run: |
-        cd frontend
-        npm ci
-    
-    - name: Run Backend Tests
-      run: |
-        cd backend
-        npm run test
+        cache-dependency-path: package-lock.json
+
+    # Root workspace lockfile installs both backend and frontend
+    - name: Install Dependencies
+      run: npm ci
+
+    - name: Run Backend Unit Tests
+      run: npm test -w backend
+
+    - name: Run Backend E2E Tests
+      run: npm run test:e2e -w backend
       env:
-        MONGODB_URI: mongodb://localhost:27017/test
-        JWT_SECRET: test-secret
-    
-    - name: Run Frontend Tests
-      run: |
-        cd frontend
-        npm run test
-    
+        E2E_MONGODB_URI: mongodb://localhost:27017/donorconnect-e2e
+
+    - name: Typecheck Frontend
+      run: cd frontend && npx tsc --noEmit
+
     - name: Build Backend
       run: |
         cd backend

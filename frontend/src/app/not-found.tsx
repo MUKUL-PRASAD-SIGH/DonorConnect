@@ -1,41 +1,21 @@
-'use client'
-
-import { Container, Typography, Button, Box, Paper } from '@mui/material'
-import { Home, ArrowBack } from '@mui/icons-material'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 export default function NotFound() {
-  const router = useRouter()
-
   return (
-    <Container maxWidth="sm" sx={{ py: 8 }}>
-      <Paper elevation={3} sx={{ p: 6, textAlign: 'center' }}>
-        <Typography variant="h1" sx={{ fontSize: '6rem', fontWeight: 'bold', color: 'primary.main' }}>
-          404
-        </Typography>
-        <Typography variant="h4" gutterBottom>
-          Page Not Found
-        </Typography>
-        <Typography variant="body1" color="text.secondary" paragraph>
-          The page you're looking for doesn't exist or has been moved.
-        </Typography>
-        <Box sx={{ mt: 4, display: 'flex', gap: 2, justifyContent: 'center' }}>
-          <Button
-            variant="contained"
-            startIcon={<Home />}
-            onClick={() => router.push('/')}
-          >
-            Go Home
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<ArrowBack />}
-            onClick={() => router.back()}
-          >
-            Go Back
-          </Button>
-        </Box>
-      </Paper>
-    </Container>
+    <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
+      <div style={{ textAlign: 'center', maxWidth: 420 }}>
+        <p style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic', fontSize: 72, color: '#9E1B22', margin: 0, lineHeight: 1 }}>404</p>
+        <h1 style={{ fontFamily: 'var(--font-serif)', fontWeight: 400, fontSize: 36, margin: '12px 0 8px' }}>
+          This page <em>doesn’t exist</em>
+        </h1>
+        <p style={{ color: '#6A5F55', margin: '0 0 28px' }}>If someone forwarded you a request link, check it wasn’t cut off.</p>
+        <Link
+          href="/"
+          style={{ background: '#9E1B22', color: '#FFF9F3', borderRadius: 999, padding: '10px 22px', fontWeight: 600, textDecoration: 'none' }}
+        >
+          Go home
+        </Link>
+      </div>
+    </main>
   )
 }

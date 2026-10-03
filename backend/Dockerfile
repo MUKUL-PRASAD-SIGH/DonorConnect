@@ -1,36 +1,19 @@
-FROM node:18-alpine
-
+FROM node:20-alpine AS build
 WORKDIR /app
-
-# Install curl for health checks
-RUN apk add --no-cache curl
-
-# Copy package files
 COPY package*.json ./
-
-# Install dependencies
-RUN npm ci --only=production
-
-# Copy source code
+RUN npm ci
 COPY . .
+RUN npm run build && npm prune --omit=dev
 
-# Build the application
-RUN npm run build
-
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nestjs -u 1001
-
-# Change ownership of the app directory
-RUN chown -R nestjs:nodejs /app
+FROM node:20-alpine
+WORKDIR /app
+RUN apk add --no-cache curl && addgroup -g 1001 -S nodejs && adduser -S nestjs -u 1001
+COPY --from=build --chown=nestjs:nodejs /app/node_modules ./node_modules
+COPY --from=build --chown=nestjs:nodejs /app/dist ./dist
+COPY --chown=nestjs:nodejs package*.json ./
 USER nestjs
-
-# Expose port
+ENV NODE_ENV=production
 EXPOSE 3001
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:3001/health || exit 1
-
-# Start the application
-CMD ["npm", "run", "start:prod"]
+CMD ["node", "dist/main"]

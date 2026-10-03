@@ -1,57 +1,28 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useDispatch, useSelector } from 'react-redux'
-import { CircularProgress, Box } from '@mui/material'
-import { AppDispatch, RootState } from '@/store'
-import { setCredentials } from '@/store/slices/authSlice'
+import { useEffect } from 'react'
+import { useAppDispatch } from '@/store/hooks'
+import { refreshUser, restore } from '@/store/slices/authSlice'
+import { tokenStore } from '@/lib/api'
 
-interface AuthWrapperProps {
-  children: React.ReactNode
-}
-
-export default function AuthWrapper({ children }: AuthWrapperProps) {
-  const dispatch = useDispatch<AppDispatch>()
-  const { isAuthenticated, user } = useSelector((state: RootState) => state.auth)
-  const [isLoading, setIsLoading] = useState(true)
+/** Restores the session from localStorage after hydration, without blocking render. */
+export default function AuthWrapper({ children }: { children: React.ReactNode }) {
+  const dispatch = useAppDispatch()
 
   useEffect(() => {
-    // Check if user data exists in localStorage but not in Redux state
-    const checkAuthState = () => {
-      try {
-        const storedUser = localStorage.getItem('user')
-        const storedToken = localStorage.getItem('token')
-
-        if (storedUser && storedToken && !isAuthenticated) {
-          // Restore authentication state from localStorage
-          const userData = JSON.parse(storedUser)
-          dispatch(setCredentials({ user: userData, token: storedToken }))
-        }
-      } catch (error) {
-        console.error('Error restoring auth state:', error)
-        // Clear invalid data
-        localStorage.removeItem('user')
-        localStorage.removeItem('token')
-      } finally {
-        setIsLoading(false)
+    try {
+      const token = tokenStore.get()
+      const user = localStorage.getItem('user')
+      if (token && user) {
+        dispatch(restore({ token, user: JSON.parse(user) }))
+        dispatch(refreshUser())
+        return
       }
+    } catch {
+      tokenStore.clear()
     }
-
-    checkAuthState()
-  }, [dispatch, isAuthenticated])
-
-  if (isLoading) {
-    return (
-      <Box 
-        display="flex" 
-        justifyContent="center" 
-        alignItems="center" 
-        minHeight="100vh"
-      >
-        <CircularProgress />
-      </Box>
-    )
-  }
+    dispatch(restore(null))
+  }, [dispatch])
 
   return <>{children}</>
 }

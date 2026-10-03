@@ -1,58 +1,41 @@
 'use client'
 
 import React from 'react'
-import { Box, Typography, Button, Container, Paper } from '@mui/material'
-import { ErrorOutline, Refresh } from '@mui/icons-material'
 
-interface ErrorBoundaryState {
+interface State {
   hasError: boolean
-  error?: Error
 }
 
-class ErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  ErrorBoundaryState
-> {
-  constructor(props: { children: React.ReactNode }) {
-    super(props)
-    this.state = { hasError: false }
+// Rendered outside the MUI theme provider, so it uses plain styles on purpose.
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, State> {
+  state: State = { hasError: false }
+
+  static getDerivedStateFromError(): State {
+    return { hasError: true }
   }
 
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { hasError: true, error }
-  }
-
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    // In production, you'd log this to your error reporting service
-    // console.error('Error caught by boundary:', error, errorInfo)
+  componentDidCatch(error: Error) {
+    console.error(error)
   }
 
   render() {
-    if (this.state.hasError) {
-      return (
-        <Container maxWidth="sm" sx={{ py: 8 }}>
-          <Paper elevation={3} sx={{ p: 4, textAlign: 'center' }}>
-            <ErrorOutline sx={{ fontSize: 80, color: 'error.main', mb: 2 }} />
-            <Typography variant="h4" gutterBottom color="error">
-              Oops! Something went wrong
-            </Typography>
-            <Typography variant="body1" color="text.secondary" paragraph>
-              We're sorry, but something unexpected happened. Please try refreshing the page.
-            </Typography>
-            <Button
-              variant="contained"
-              startIcon={<Refresh />}
-              onClick={() => window.location.reload()}
-              sx={{ mt: 2 }}
-            >
-              Refresh Page
-            </Button>
-          </Paper>
-        </Container>
-      )
-    }
-
-    return this.props.children
+    if (!this.state.hasError) return this.props.children
+    return (
+      <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: '#F3ECE0', color: '#1E1916' }}>
+        <div style={{ maxWidth: 420, textAlign: 'center' }}>
+          <h1 style={{ fontFamily: 'var(--font-serif), Georgia, serif', fontWeight: 400, fontSize: 40, margin: '0 0 8px' }}>
+            Something <em>went wrong</em>
+          </h1>
+          <p style={{ color: '#6A5F55', margin: '0 0 24px' }}>The page hit an unexpected error. Reloading usually fixes it.</p>
+          <button
+            onClick={() => window.location.reload()}
+            style={{ background: '#9E1B22', color: '#FFF9F3', border: 0, borderRadius: 999, padding: '10px 22px', fontWeight: 600, cursor: 'pointer' }}
+          >
+            Reload page
+          </button>
+        </div>
+      </main>
+    )
   }
 }
 

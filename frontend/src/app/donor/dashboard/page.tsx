@@ -1,667 +1,192 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useDispatch, useSelector } from 'react-redux'
-import {
-  Container,
-  Grid,
-  Card,
-  CardContent,
-  Typography,
-  Button,
-  Box,
-  Chip,
-  Alert,
-  LinearProgress,
-  Avatar,
-  Paper,
-  Fade,
-  Grow,
-  IconButton,
-  Tooltip,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Divider,
-  CircularProgress
-} from '@mui/material'
-import {
-  Favorite,
-  EmojiEvents,
-  LocationOn,
-  CheckCircle,
-  BloodtypeOutlined,
-  Schedule,
-  TrendingUp,
-  Star,
-  LocalHospital,
-  Refresh,
-  VolunteerActivism,
-  Timeline,
-  CardGiftcard,
-  AccessTime,
-  DirectionsRun,
-  Phone,
-  Navigation,
-  Cancel,
-  Edit
-} from '@mui/icons-material'
-import { toast } from 'react-toastify'
-import { AppDispatch, RootState } from '@/store'
-import { fetchActiveAlerts, respondToAlert } from '@/store/slices/alertsSlice'
-import DonorHealthCard from '@/components/DonorHealthCard'
-import SimpleMap from '@/components/SimpleMap'
-import MapStats from '@/components/MapStats'
-import MapNotifications from '@/components/MapNotifications'
-import ProfileEditor from '@/components/ProfileEditor'
-import DemoControls from '@/components/DemoControls'
+import { useState } from 'react'
+import { Box, Grid, Stack, Tab, Tabs, Typography } from '@mui/material'
+import { Inbox } from '@mui/icons-material'
+import { toast } from 'sonner'
+import AppShell from '@/components/AppShell'
+import RequireRole from '@/components/RequireRole'
+import InviteCard from '@/components/donor/InviteCard'
+import EligibilityPanel from '@/components/donor/EligibilityPanel'
+import ProfilePanel from '@/components/donor/ProfilePanel'
+import ScreeningDialog from '@/components/donor/ScreeningDialog'
+import { BloodBadge, EmptyState, LoadingRows, Pill, Stat } from '@/components/ui'
+import { api } from '@/lib/api'
+import { shortDate } from '@/lib/format'
+import { useResource } from '@/lib/hooks'
+import { useSocketEvent } from '@/lib/socket'
+import type { DonorAlert, DonorProfile } from '@/lib/types'
+import { tokens as t } from '@/theme/tokens'
 
-export default function DonorDashboard() {
-  const dispatch = useDispatch<AppDispatch>()
-  const { activeAlerts, loading } = useSelector((state: RootState) => state.alerts)
-  const { user, isAuthenticated } = useSelector((state: RootState) => state.auth)
-  const router = useRouter()
+const greeting = () => {
+  const h = new Date().getHours()
+  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
+}
 
-  const [responding, setResponding] = useState(false)
-  const [mounted, setMounted] = useState(false)
-  const [profileEditorOpen, setProfileEditorOpen] = useState(false)
+const EVENT_TOAST: Record<string, (a: DonorAlert) => string | null> = {
+  invite: (a) => `${a.hospital?.name || 'A hospital'} needs ${a.bloodGroup} ${a.componentLabel}`,
+  confirmed: (a) => `A slot opened at ${a.hospital?.name} — it’s yours`,
+  stood_down: () => 'A request you were invited to is now covered. Thank you!',
+  lapsed: () => 'Your held slot expired and was offered to another donor',
+  closed: () => null,
+  standby: () => null,
+}
 
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+function DonorDashboard() {
+  const [tab, setTab] = useState(0)
+  const [screeningOpen, setScreeningOpen] = useState(false)
+  const profile = useResource(api.donors.profile)
+  const invites = useResource(api.alerts.invites)
+  const nearby = useResource(api.alerts.nearby)
 
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (mounted && !isAuthenticated) {
-      router.push('/auth/login')
-    }
-  }, [mounted, isAuthenticated, router])
+  useSocketEvent<{ kind: string; alert: DonorAlert }>('invite:update', ({ kind, alert }) => {
+    invites.refresh()
+    nearby.refresh()
+    const msg = EVENT_TOAST[kind]?.(alert)
+    if (msg) (kind === 'invite' || kind === 'confirmed' ? toast.success : toast)(msg)
+    if (kind === 'invite') setTab(0)
+  })
 
-  // Don't render if not authenticated
-  if (!isAuthenticated || !user) {
-    return (
-      <Container maxWidth="lg" sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
-        <CircularProgress />
-      </Container>
-    )
+  const replace = (updated: DonorAlert) => {
+    invites.refresh()
+    nearby.setData((list) => list?.filter((a) => a._id !== updated._id))
+    profile.refresh()
   }
 
-  // Dynamic donor stats based on user data
-  const donorStats = {
-    totalDonations: 12,
-    lastDonationDate: new Date('2024-01-15'),
-    nextEligibleDate: new Date('2024-04-15'),
-    bloodGroup: user?.bloodGroup || 'O+', // Use actual user blood group
-    points: 1250,
-    rewardPoints: 23,
-    level: 'Gold Donor',
-    badges: ['Life Saver', 'Regular Hero', 'Emergency Responder'],
-    totalDistance: 45.2,
-    livesImpacted: 36,
-    healthScore: 95
-  }
-
-  useEffect(() => {
-    dispatch(fetchActiveAlerts())
-    const interval = setInterval(() => {
-      dispatch(fetchActiveAlerts())
-    }, 30000)
-    return () => clearInterval(interval)
-  }, [dispatch])
-
-  const handleQuickResponse = async (alertId: string, response: 'accepted' | 'declined') => {
-    setResponding(true)
-    try {
-      await dispatch(respondToAlert({
-        alertId,
-        response: {
-          status: response,
-          estimatedArrival: response === 'accepted' ? '30 minutes' : null,
-          notes: response === 'accepted' ? 'On my way!' : 'Unable to help at this time'
-        }
-      })).unwrap()
-      
-      toast.success(response === 'accepted' ? 'Response sent! Thank you for helping!' : 'Response recorded')
-      dispatch(fetchActiveAlerts())
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to respond to alert')
-    } finally {
-      setResponding(false)
-    }
-  }
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'critical': return 'error'
-      case 'high': return 'error'
-      case 'medium': return 'warning'
-      case 'low': return 'success'
-      default: return 'default'
-    }
-  }
-
-  const getTimeUrgency = (requiredBy: string) => {
-    const now = new Date()
-    const required = new Date(requiredBy)
-    const hoursLeft = (required.getTime() - now.getTime()) / (1000 * 60 * 60)
-
-    if (hoursLeft < 2) return { text: 'URGENT - Less than 2 hours', color: 'error' }
-    if (hoursLeft < 6) return { text: `${Math.floor(hoursLeft)} hours left`, color: 'warning' }
-    return { text: `${Math.floor(hoursLeft)} hours left`, color: 'success' }
-  }
-
-  const daysUntilEligible = Math.ceil((donorStats.nextEligibleDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
-
-  if (!mounted) {
-    return (
-      <Container maxWidth="lg" sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
-        <CircularProgress />
-      </Container>
-    )
-  }
+  const p = profile.data
+  const active = (invites.data || []).filter((a) => a.status === 'active' && ['invited', 'accepted', 'standby'].includes(a.myResponse?.status || ''))
+  const past = (invites.data || []).filter((a) => !active.includes(a))
+  const wb = p?.eligibility.components.whole_blood
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      {/* Donor Welcome Header */}
-      <Fade in timeout={800}>
-        <Paper
-          elevation={0}
-          sx={{
-            p: 4,
-            mb: 4,
-            background: 'linear-gradient(135deg, #e91e63 0%, #f06292 100%)',
-            color: 'white',
-            borderRadius: 3,
-            position: 'relative',
-            overflow: 'hidden'
-          }}
-        >
-          <Box display="flex" justifyContent="space-between" alignItems="center">
-            <Box display="flex" alignItems="center" gap={3}>
-              <Avatar 
-                sx={{ 
-                  width: 80, 
-                  height: 80, 
-                  bgcolor: 'rgba(255,255,255,0.2)',
-                  fontSize: '2rem'
-                }}
-              >
-                <Favorite fontSize="large" />
-              </Avatar>
-              <Box>
-                <Typography variant="h3" fontWeight="bold" gutterBottom>
-                  Welcome Back, {user?.name?.split(' ')[0] || 'Hero'}! 🩸
-                </Typography>
-                <Typography variant="h6" sx={{ opacity: 0.9 }}>
-                  {user?.name || 'Anonymous Donor'} • {user?.bloodGroup || donorStats.bloodGroup} Donor
-                </Typography>
-                <Box display="flex" alignItems="center" gap={2} mt={1}>
-                  <Chip 
-                    icon={<EmojiEvents />} 
-                    label={donorStats.level} 
-                    size="small" 
-                    sx={{ bgcolor: 'rgba(255,193,7,0.8)', color: 'white' }}
-                  />
-                  <Chip 
-                    icon={<Star />} 
-                    label={`${donorStats.points} Points`} 
-                    size="small" 
-                    sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white' }}
-                  />
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    startIcon={<Edit />}
-                    onClick={() => setProfileEditorOpen(true)}
-                    sx={{ 
-                      color: 'white', 
-                      borderColor: 'rgba(255,255,255,0.5)',
-                      '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' }
-                    }}
-                  >
-                    Edit Profile
-                  </Button>
-                </Box>
-              </Box>
-            </Box>
-            <Box textAlign="center">
-              <Typography variant="h2" fontWeight="bold" color="rgba(255,255,255,0.9)">
-                {donorStats.livesImpacted}
-              </Typography>
-              <Typography variant="body1">
-                Lives Impacted 💝
-              </Typography>
-            </Box>
-          </Box>
-        </Paper>
-      </Fade>
-
-      {/* Donor Stats Cards */}
-      <Grid container spacing={3} mb={4}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Grow in timeout={600}>
-            <Card sx={{ 
-              background: 'linear-gradient(135deg, #f44336 0%, #e57373 100%)',
-              color: 'white',
-              height: '100%'
-            }}>
-              <CardContent>
-                <Box display="flex" alignItems="center" justifyContent="space-between">
-                  <Box>
-                    <Typography variant="h3" fontWeight="bold">
-                      {donorStats.totalDonations}
-                    </Typography>
-                    <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                      🩸 Total Donations
-                    </Typography>
-                  </Box>
-                  <BloodtypeOutlined sx={{ fontSize: 40, opacity: 0.8 }} />
-                </Box>
-                <LinearProgress 
-                  variant="determinate" 
-                  value={(donorStats.totalDonations / 20) * 100} 
-                  sx={{ 
-                    mt: 2, 
-                    bgcolor: 'rgba(255,255,255,0.3)',
-                    '& .MuiLinearProgress-bar': { bgcolor: 'rgba(255,255,255,0.8)' }
-                  }}
-                />
-                <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
-                  Next milestone: 20 donations
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grow>
-        </Grid>
-        
-        <Grid item xs={12} sm={6} md={3}>
-          <Grow in timeout={800}>
-            <Card sx={{ 
-              background: 'linear-gradient(135deg, #4caf50 0%, #81c784 100%)',
-              color: 'white',
-              height: '100%'
-            }}>
-              <CardContent>
-                <Box display="flex" alignItems="center" justifyContent="space-between">
-                  <Box>
-                    <Typography variant="h3" fontWeight="bold">
-                      {donorStats.healthScore}%
-                    </Typography>
-                    <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                      💪 Health Score
-                    </Typography>
-                  </Box>
-                  <Favorite sx={{ fontSize: 40, opacity: 0.8 }} />
-                </Box>
-                <Box display="flex" alignItems="center" mt={2}>
-                  <CheckCircle sx={{ mr: 1, fontSize: 16 }} />
-                  <Typography variant="caption">
-                    Excellent condition for donation
-                  </Typography>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grow>
-        </Grid>
-        
-        <Grid item xs={12} sm={6} md={3}>
-          <Grow in timeout={1000}>
-            <Card sx={{ 
-              background: daysUntilEligible <= 0 
-                ? 'linear-gradient(135deg, #4caf50 0%, #66bb6a 100%)'
-                : 'linear-gradient(135deg, #ff9800 0%, #ffb74d 100%)',
-              color: 'white',
-              height: '100%'
-            }}>
-              <CardContent>
-                <Box display="flex" alignItems="center" justifyContent="space-between">
-                  <Box>
-                    <Typography variant="h3" fontWeight="bold">
-                      {daysUntilEligible <= 0 ? '✅' : daysUntilEligible}
-                    </Typography>
-                    <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                      {daysUntilEligible <= 0 ? '🎉 Ready to Donate!' : '⏰ Days Until Eligible'}
-                    </Typography>
-                  </Box>
-                  <Schedule sx={{ fontSize: 40, opacity: 0.8 }} />
-                </Box>
-                <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
-                  {daysUntilEligible <= 0 
-                    ? 'You can donate blood now!' 
-                    : `Next eligible: ${new Date(donorStats.nextEligibleDate).toLocaleDateString()}`
-                  }
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grow>
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={3}>
-          <Grow in timeout={1200}>
-            <Card sx={{ 
-              background: 'linear-gradient(135deg, #9c27b0 0%, #ba68c8 100%)',
-              color: 'white',
-              height: '100%'
-            }}>
-              <CardContent>
-                <Box display="flex" alignItems="center" justifyContent="space-between">
-                  <Box>
-                    <Typography variant="h3" fontWeight="bold">
-                      {donorStats.badges.length}
-                    </Typography>
-                    <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                      🏆 Badges Earned
-                    </Typography>
-                  </Box>
-                  <EmojiEvents sx={{ fontSize: 40, opacity: 0.8 }} />
-                </Box>
-                <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
-                  Latest: {donorStats.badges[donorStats.badges.length - 1]}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grow>
-        </Grid>
-      </Grid>
-
-      {/* Available Blood Requests */}
-      <Card sx={{ borderRadius: 3, overflow: 'hidden', mb: 4 }}>
-        <Box sx={{ 
-          background: 'linear-gradient(90deg, #f5f5f5 0%, #e0e0e0 100%)',
-          p: 3,
-          borderBottom: '1px solid #e0e0e0'
-        }}>
-          <Box display="flex" justifyContent="space-between" alignItems="center">
-            <Box display="flex" alignItems="center" gap={2}>
-              <LocalHospital color="error" sx={{ fontSize: 28 }} />
-              <Typography variant="h5" fontWeight="bold">
-                🚨 Blood Requests Near You
-              </Typography>
-            </Box>
-            <Box display="flex" gap={1}>
-              <Tooltip title="Refresh requests">
-                <IconButton onClick={() => dispatch(fetchActiveAlerts())}>
-                  <Refresh />
-                </IconButton>
-              </Tooltip>
-              <Chip 
-                label={`${activeAlerts.length} Active`} 
-                color="error" 
-                size="small" 
-              />
-            </Box>
-          </Box>
-        </Box>
-        
-        <CardContent sx={{ p: 0 }}>
-          {loading ? (
-            <Box display="flex" justifyContent="center" py={4}>
-              <CircularProgress />
-            </Box>
-          ) : activeAlerts.length === 0 ? (
-            <Box textAlign="center" py={8}>
-              <CheckCircle sx={{ fontSize: 80, color: 'grey.300', mb: 2 }} />
-              <Typography variant="h6" color="text.secondary" gutterBottom>
-                No urgent blood requests right now
-              </Typography>
-              <Typography variant="body2" color="text.secondary" mb={3}>
-                Great job! All current needs are being met. Check back later.
-              </Typography>
-              <Button
-                variant="outlined"
-                startIcon={<Refresh />}
-                onClick={() => dispatch(fetchActiveAlerts())}
-              >
-                Check for Updates
-              </Button>
-            </Box>
-          ) : (
+    <>
+      <Box component="section" pt={{ xs: 4, md: 6 }} pb={4} className="rise">
+        <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={3}>
+          <Stack direction="row" spacing={2.5} alignItems="center">
+            {p && <BloodBadge group={p.bloodGroup} size={64} />}
             <Box>
-              {activeAlerts.slice(0, 5).map((alert, index) => {
-                const urgency = getTimeUrgency(alert.requiredBy)
-                return (
-                  <Fade in timeout={300 + index * 100} key={alert._id}>
-                    <Box>
-                      <Box sx={{ 
-                        p: 3, 
-                        borderLeft: `4px solid ${
-                          alert.priority === 'critical' ? '#f44336' :
-                          alert.priority === 'high' ? '#ff9800' :
-                          alert.priority === 'medium' ? '#2196f3' : '#4caf50'
-                        }`,
-                        '&:hover': { 
-                          bgcolor: 'grey.50',
-                          transform: 'translateX(4px)',
-                          transition: 'all 0.2s ease'
-                        }
-                      }}>
-                        <Box display="flex" justifyContent="space-between" alignItems="start">
-                          <Box flex={1}>
-                            <Box display="flex" alignItems="center" gap={1} mb={2}>
-                              <Chip 
-                                label={`🩸 ${alert.bloodGroup}`} 
-                                color="error" 
-                                size="small"
-                                sx={{ fontWeight: 'bold' }}
-                              />
-                              <Chip 
-                                label={alert.priority.toUpperCase()} 
-                                color={getPriorityColor(alert.priority) as any}
-                                size="small"
-                              />
-                              <Chip 
-                                label={urgency.text} 
-                                color={urgency.color as any}
-                                size="small"
-                                icon={<AccessTime />}
-                              />
-                              {alert.isEmergency && (
-                                <Chip 
-                                  label="🚨 EMERGENCY" 
-                                  color="error" 
-                                  size="small"
-                                  sx={{ animation: 'pulse 2s infinite' }}
-                                />
-                              )}
-                            </Box>
-                            
-                            <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
-                              {alert.hospitalId?.hospitalName || 'Local Hospital'}
-                            </Typography>
-                            
-                            <Typography variant="body1" color="text.secondary" gutterBottom>
-                              {alert.patientCondition}
-                            </Typography>
-                            
-                            <Box display="flex" alignItems="center" gap={3} mb={2}>
-                              <Box display="flex" alignItems="center" gap={0.5}>
-                                <BloodtypeOutlined fontSize="small" color="error" />
-                                <Typography variant="body2" fontWeight="medium">
-                                  {alert.unitsNeeded} units needed
-                                </Typography>
-                              </Box>
-                              <Box display="flex" alignItems="center" gap={0.5}>
-                                <LocationOn fontSize="small" color="primary" />
-                                <Typography variant="body2">
-                                  Within {alert.searchRadius}km
-                                </Typography>
-                              </Box>
-                              <Box display="flex" alignItems="center" gap={0.5}>
-                                <DirectionsRun fontSize="small" color="action" />
-                                <Typography variant="body2" color="text.secondary">
-                                  ~15 min drive
-                                </Typography>
-                              </Box>
-                            </Box>
-                            
-                            {alert.additionalNotes && (
-                              <Typography variant="body2" color="text.secondary" sx={{ 
-                                fontStyle: 'italic',
-                                mt: 1,
-                                p: 1,
-                                bgcolor: 'grey.100',
-                                borderRadius: 1
-                              }}>
-                                💬 {alert.additionalNotes}
-                              </Typography>
-                            )}
-                          </Box>
-                          
-                          <Box display="flex" flexDirection="column" gap={1} ml={2}>
-                            <Button
-                              variant="contained"
-                              color="error"
-                              size="small"
-                              startIcon={<Favorite />}
-                              onClick={() => handleQuickResponse(alert._id, 'accepted')}
-                              disabled={responding}
-                              sx={{ minWidth: 120 }}
-                            >
-                              I Can Help!
-                            </Button>
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              startIcon={<Cancel />}
-                              onClick={() => handleQuickResponse(alert._id, 'declined')}
-                              disabled={responding}
-                              sx={{ minWidth: 120 }}
-                            >
-                              Can't Help
-                            </Button>
-                            <Button
-                              variant="text"
-                              size="small"
-                              startIcon={<Phone />}
-                              sx={{ minWidth: 120 }}
-                            >
-                              Call Hospital
-                            </Button>
-                          </Box>
-                        </Box>
-                      </Box>
-                      {index < activeAlerts.length - 1 && <Divider />}
-                    </Box>
-                  </Fade>
-                )
-              })}
+              <Typography variant="h2" component="h1">
+                {greeting()}, <em>{p?.name.split(' ')[0] || '…'}</em>
+              </Typography>
+              <Stack direction="row" spacing={1} mt={1.25} flexWrap="wrap" useFlexGap>
+                {p &&
+                  (p.availableForEmergency ? (
+                    <Pill tone="green" live>
+                      Available for requests
+                    </Pill>
+                  ) : (
+                    <Pill>Paused — not receiving invites</Pill>
+                  ))}
+                {p?.rarePhenotypes.length ? <Pill tone="red">Rare blood registry</Pill> : null}
+              </Stack>
             </Box>
+          </Stack>
+          {p && (
+            <Stack direction="row" spacing={{ xs: 3, md: 5 }} alignItems="flex-start">
+              <Stat label="Donations" value={p.totalDonations} />
+              <Stat
+                label="Whole blood"
+                value={wb?.eligible ? 'Ready' : wb?.nextEligibleDate ? shortDate(wb.nextEligibleDate).replace(/ \d{4}$/, '') : '—'}
+                hint={wb?.eligible ? 'You can donate today' : 'Next eligible'}
+                tone={wb?.eligible ? 'red' : 'ink'}
+              />
+            </Stack>
           )}
-        </CardContent>
-      </Card>
+        </Stack>
+      </Box>
 
-      {/* Map Statistics */}
-      <MapStats userRole="donor" />
+      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: `1px solid ${t.line}`, mb: 3.5 }}>
+        <Tab label={`Requests${active.length ? ` · ${active.length}` : ''}`} />
+        <Tab label="Eligibility" />
+        <Tab label="Profile" />
+      </Tabs>
 
-      {/* Live Map Section */}
-      <Card sx={{ borderRadius: 3, overflow: 'hidden', mb: 4 }}>
-        <Box sx={{ 
-          background: 'linear-gradient(90deg, #f5f5f5 0%, #e0e0e0 100%)',
-          p: 3,
-          borderBottom: '1px solid #e0e0e0'
-        }}>
-          <Typography variant="h5" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            🗺️ Nearby Opportunities
-            <Chip label="Live Updates" color="primary" size="small" />
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Find hospitals, emergency alerts, and donation camps near you
-          </Typography>
-        </Box>
-        <CardContent sx={{ p: 0 }}>
-          <SimpleMap userRole="donor" height={500} />
-        </CardContent>
-      </Card>
-
-      {/* Donor Health Card */}
-      <DonorHealthCard donorStats={donorStats} />
-
-      {/* Recent Activity & Achievements */}
-      <Grid container spacing={3} mt={2}>
-        <Grid item xs={12} md={6}>
-          <Card sx={{ borderRadius: 3, height: '100%' }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Timeline color="primary" />
-                Recent Activity
-              </Typography>
-              <List>
-                <ListItem>
-                  <ListItemIcon><CheckCircle color="success" /></ListItemIcon>
-                  <ListItemText 
-                    primary="Donated at Local Hospital"
-                    secondary={`January 15, 2024 • 450ml • ${user?.bloodGroup || 'O+'} Blood`}
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemIcon><EmojiEvents color="warning" /></ListItemIcon>
-                  <ListItemText 
-                    primary="Earned 'Emergency Responder' Badge"
-                    secondary="Responded to 5 emergency alerts"
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemIcon><Star color="primary" /></ListItemIcon>
-                  <ListItemText 
-                    primary="Reached Gold Donor Status"
-                    secondary="Completed 10+ successful donations"
-                  />
-                </ListItem>
-              </List>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <Card sx={{ borderRadius: 3, height: '100%' }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <CardGiftcard color="secondary" />
-                Rewards & Achievements
-              </Typography>
-              <Box display="flex" flexWrap="wrap" gap={1} mb={3}>
-                {donorStats.badges.map((badge, index) => (
-                  <Chip
-                    key={index}
-                    label={badge}
-                    color="primary"
-                    variant="outlined"
-                    size="small"
-                    icon={<EmojiEvents />}
-                  />
+      {tab === 0 && (
+        <Grid container spacing={4}>
+          <Grid item xs={12} md={7}>
+            <Typography variant="overline" color="text.secondary" display="block" mb={1.5}>
+              Your invites
+            </Typography>
+            {invites.loading ? (
+              <LoadingRows rows={2} height={180} />
+            ) : active.length ? (
+              <Stack spacing={2} className="stagger">
+                {active.map((a) => (
+                  <InviteCard key={a._id} alert={a} onChange={replace} />
                 ))}
-              </Box>
-              <Box>
-                <Typography variant="body2" color="text.secondary" gutterBottom>
-                  Progress to next reward (Free Health Checkup)
+              </Stack>
+            ) : (
+              <EmptyState
+                icon={<Inbox />}
+                title={
+                  <>
+                    Nothing needs you <em>right now</em>
+                  </>
+                }
+                body="We only invite a few well-matched donors at a time, so you won’t get a flood of alerts. Keep your screening current and we’ll reach you when it counts."
+              />
+            )}
+            {past.length > 0 && (
+              <>
+                <Typography variant="overline" color="text.secondary" display="block" mt={5} mb={1.5}>
+                  Recent
                 </Typography>
-                <LinearProgress 
-                  variant="determinate" 
-                  value={(donorStats.points / 1500) * 100} 
-                  sx={{ mb: 1 }}
-                />
-                <Typography variant="caption" color="text.secondary">
-                  {donorStats.points}/1500 points • {1500 - donorStats.points} points to go
-                </Typography>
-              </Box>
-            </CardContent>
-          </Card>
+                <Stack spacing={1.5}>
+                  {past.slice(0, 5).map((a) => (
+                    <InviteCard key={a._id} alert={a} onChange={replace} />
+                  ))}
+                </Stack>
+              </>
+            )}
+          </Grid>
+          <Grid item xs={12} md={5}>
+            <Typography variant="overline" color="text.secondary" display="block" mb={1.5}>
+              Open requests near you
+            </Typography>
+            <Typography variant="body2" color="text.secondary" mb={2}>
+              Requests you match but haven’t been invited to yet. Offering puts you straight into an open slot.
+            </Typography>
+            {nearby.loading ? (
+              <LoadingRows rows={2} height={160} />
+            ) : nearby.data?.length ? (
+              <Stack spacing={2}>
+                {nearby.data.map((a) => (
+                  <InviteCard key={a._id} alert={a} onChange={replace} volunteer />
+                ))}
+              </Stack>
+            ) : (
+              <Typography variant="body2" color="text.secondary" sx={{ py: 3, borderTop: `1px solid ${t.line}` }}>
+                No other open requests match your blood group nearby.
+              </Typography>
+            )}
+          </Grid>
         </Grid>
-      </Grid>
+      )}
 
-      {/* Map Notifications */}
-      <MapNotifications userRole="donor" />
+      {tab === 1 && (p ? <EligibilityPanel profile={p} onScreen={() => setScreeningOpen(true)} /> : <LoadingRows rows={2} height={160} />)}
+      {tab === 2 && (p ? <ProfilePanel profile={p} onSaved={(x: DonorProfile) => profile.setData(x)} /> : <LoadingRows rows={2} height={200} />)}
 
-      {/* Profile Editor Dialog */}
-      <ProfileEditor 
-        open={profileEditorOpen} 
-        onClose={() => setProfileEditorOpen(false)} 
-      />
+      {p && (
+        <ScreeningDialog
+          open={screeningOpen}
+          onClose={() => setScreeningOpen(false)}
+          profile={p}
+          onSaved={(x) => {
+            profile.setData(x)
+            nearby.refresh()
+          }}
+        />
+      )}
+    </>
+  )
+}
 
-      {/* Demo Controls for Judges */}
-      <DemoControls userRole="donor" />
-    </Container>
+export default function Page() {
+  return (
+    <AppShell>
+      <RequireRole role="donor">
+        <DonorDashboard />
+      </RequireRole>
+    </AppShell>
   )
 }

@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthService } from './auth.service';
+import { jwtSecret } from '../common/config';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { LocalStrategy } from './strategies/local.strategy';
@@ -13,9 +14,8 @@ import { Hospital, HospitalSchema } from '../schemas/hospital.schema';
 @Module({
   imports: [
     PassportModule,
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || 'blood-donor-secret-key',
-      signOptions: { expiresIn: '7d' },
+    JwtModule.registerAsync({
+      useFactory: () => ({ secret: jwtSecret(), signOptions: { expiresIn: '7d' } }),
     }),
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },

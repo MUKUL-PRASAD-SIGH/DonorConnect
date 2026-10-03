@@ -1,64 +1,40 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter } from 'next/font/google'
-import { ToastContainer } from 'react-toastify'
 import { Providers } from './providers'
 import ErrorBoundary from '@/components/ErrorBoundary'
+// Self-hosted so builds and dev servers never depend on reaching Google Fonts
+import '@fontsource-variable/inter'
+import '@fontsource/instrument-serif/400.css'
+import '@fontsource/instrument-serif/400-italic.css'
 import './globals.css'
-import 'react-toastify/dist/ReactToastify.css'
 
-const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  metadataBase: new URL('http://localhost:3000'),
-  title: 'BloodMe - Save Lives Through Blood Donation',
-  description: 'Revolutionary blood donation platform connecting hospitals with donors through real-time alerts, interactive maps, and gamified experiences. Join thousands saving lives daily.',
-  keywords: 'blood donation, emergency alerts, hospital network, save lives, blood donors, medical emergency',
-  authors: [{ name: 'BloodMe Team' }],
-  robots: 'index, follow',
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'),
+  title: 'DonorConnect — Coordinated blood response',
+  description:
+    'DonorConnect coordinates blood donors instead of broadcasting to them: ranked invite waves with held slots, verified live request links, shortage forecasting and a rare-blood registry.',
   manifest: '/manifest.json',
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'default',
-    title: 'BloodMe',
-  },
+  appleWebApp: { capable: true, statusBarStyle: 'default', title: 'DonorConnect' },
   openGraph: {
-    title: 'BloodMe - Save Lives Through Blood Donation',
-    description: 'Revolutionary blood donation platform connecting hospitals with donors',
+    title: 'DonorConnect — Coordinated blood response',
+    description: 'The right donors, the right number, at the right time.',
     type: 'website',
-    locale: 'en_US',
+    locale: 'en_IN',
   },
 }
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  themeColor: '#d32f2f',
+  themeColor: '#F3ECE0',
 }
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body>
         <ErrorBoundary>
-          <Providers>
-            {children}
-            <ToastContainer
-              position="top-right"
-              autoClose={5000}
-              hideProgressBar={false}
-              newestOnTop={false}
-              closeOnClick
-              rtl={false}
-              pauseOnFocusLoss
-              draggable
-              pauseOnHover
-            />
-          </Providers>
+          <Providers>{children}</Providers>
         </ErrorBoundary>
       </body>
     </html>

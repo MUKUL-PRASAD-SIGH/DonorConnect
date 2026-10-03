@@ -1,309 +1,275 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useDispatch, useSelector } from 'react-redux'
+import { Suspense, useEffect, useState } from 'react'
+import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
-  Container,
-  Paper,
-  TextField,
-  Button,
-  Typography,
-  Box,
-  Link,
   Alert,
-  CircularProgress,
-  Stepper,
-  Step,
-  StepLabel,
+  Box,
+  Button,
+  Chip,
+  Collapse,
   Grid,
-  FormControl,
-  InputLabel,
-  Select,
   MenuItem,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
-  FormLabel
+  Stack,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
 } from '@mui/material'
-import { useForm } from 'react-hook-form'
-import { toast } from 'react-toastify'
-import { AppDispatch, RootState } from '@/store'
-import { register as registerUser } from '@/store/slices/authSlice'
+import { CheckCircle, LocalHospital, MyLocation, VolunteerActivism } from '@mui/icons-material'
+import { Controller, useForm } from 'react-hook-form'
+import { toast } from 'sonner'
+import AuthLayout from '@/components/AuthLayout'
+import { useAppDispatch, useAppSelector } from '@/store/hooks'
+import { clearError, register as registerUser } from '@/store/slices/authSlice'
+import { BLOOD_GROUPS, RARE_PHENOTYPES } from '@/lib/types'
+import { tokens as t } from '@/theme/tokens'
 
-const steps = ['Account Type', 'Basic Information', 'Location & Details']
-const bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
+type Role = 'donor' | 'hospital'
 
-interface RegisterForm {
-  // Basic info
+interface Form {
   name: string
   email: string
+  phone: string
   password: string
   confirmPassword: string
-  phone: string
-  role: 'donor' | 'hospital'
   address: string
-
-  // Location (simplified - in production, use Google Maps API)
-  latitude: number
-  longitude: number
-
-  // Donor specific
-  bloodGroup?: string
-  dateOfBirth?: string
-  weight?: number
-
-  // Hospital specific
-  hospitalName?: string
-  licenseNumber?: string
-  contactPerson?: string
-  emergencyContact?: string
+  bloodGroup: string
+  dateOfBirth: string
+  weight: number
+  sex: string
+  hospitalName: string
+  licenseNumber: string
+  contactPerson: string
+  emergencyContact: string
 }
 
-export default function RegisterPage() {
-  const router = useRouter()
-  const dispatch = useDispatch<AppDispatch>()
-  const { loading, error } = useSelector((state: RootState) => state.auth)
+const STEP_FIELDS: Record<number, (keyof Form)[]> = {
+  1: ['name', 'email', 'phone', 'password', 'confirmPassword'],
+}
 
-  const [activeStep, setActiveStep] = useState(0)
-  const [userRole, setUserRole] = useState<'donor' | 'hospital'>('donor')
-  const [locationStatus, setLocationStatus] = useState<'idle' | 'detecting' | 'success' | 'error'>('idle')
+function RoleCard({ active, onClick, icon, title, body }: { active: boolean; onClick: () => void; icon: React.ReactNode; title: string; body: string }) {
+  return (
+    <Box
+      component="button"
+      type="button"
+      onClick={onClick}
+      sx={{
+        textAlign: 'left',
+        width: '100%',
+        p: 2.5,
+        borderRadius: 4,
+        cursor: 'pointer',
+        font: 'inherit',
+        color: t.ink,
+        bgcolor: active ? t.surface : 'transparent',
+        border: `1.5px solid ${active ? t.ink : t.lineStrong}`,
+        transition: 'border-color 150ms ease, background-color 150ms ease, transform 160ms var(--ease-out)',
+        '&:active': { transform: 'scale(0.98)' },
+        '&:focus-visible': { outline: `2px solid ${t.red}`, outlineOffset: 2 },
+      }}
+    >
+      <Stack direction="row" spacing={2} alignItems="flex-start">
+        <Box sx={{ color: active ? t.red : t.inkMuted, mt: '2px' }}>{icon}</Box>
+        <Box flex={1}>
+          <Typography fontWeight={600}>{title}</Typography>
+          <Typography variant="body2" color="text.secondary">
+            {body}
+          </Typography>
+        </Box>
+        {active && <CheckCircle sx={{ color: t.ink, fontSize: 20 }} />}
+      </Stack>
+    </Box>
+  )
+}
+
+function RegisterForm() {
+  const router = useRouter()
+  const params = useSearchParams()
+  const next = params.get('next')
+  const dispatch = useAppDispatch()
+  const { loading, error } = useAppSelector((s) => s.auth)
+  const [step, setStep] = useState(0)
+  const [role, setRole] = useState<Role>('donor')
+  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null)
+  const [locating, setLocating] = useState(false)
+  const [rare, setRare] = useState<string[]>([])
+  const [showRare, setShowRare] = useState(false)
 
   const {
     register,
+    control,
     handleSubmit,
+    trigger,
     watch,
     setValue,
     formState: { errors },
-    trigger
-  } = useForm<RegisterForm>()
+  } = useForm<Form>({ defaultValues: { bloodGroup: '', sex: '' } })
 
-  const password = watch('password')
+  useEffect(() => {
+    dispatch(clearError())
+  }, [dispatch])
 
-
-
-  const handleBack = () => {
-    setActiveStep((prev) => prev - 1)
-  }
-
-  const getFieldsForStep = (step: number): (keyof RegisterForm)[] => {
-    switch (step) {
-      case 0:
-        return ['role']
-      case 1:
-        return ['name', 'email', 'password', 'confirmPassword', 'phone']
-      case 2:
-        const baseFields: (keyof RegisterForm)[] = ['address']
-        if (userRole === 'donor') {
-          return [...baseFields, 'bloodGroup', 'dateOfBirth', 'weight']
-        } else {
-          return [...baseFields, 'hospitalName', 'licenseNumber', 'contactPerson', 'emergencyContact']
-        }
-      default:
-        return []
-    }
-  }
-
-  const onSubmit = async (data: RegisterForm) => {
-    try {
-      // Validate location data
-      if (!data.latitude || !data.longitude) {
-        toast.error('Please allow location access to continue.')
-        return
-      }
-
-      const registrationData = {
-        ...data,
-        role: userRole,
-        location: {
-          type: 'Point',
-          coordinates: [data.longitude, data.latitude]
-        }
-      }
-
-      // Submitting registration data
-
-      await dispatch(registerUser(registrationData)).unwrap()
-      toast.success('Registration successful!')
-
-      // Small delay to ensure state is updated
-      setTimeout(() => {
-        // Redirect based on user role
-        if (userRole === 'hospital') {
-          router.push('/hospital/dashboard')
-        } else {
-          router.push('/donor/dashboard')
-        }
-      }, 100)
-    } catch (error: any) {
-      // Registration error handled
-      toast.error(error.message || 'Registration failed')
-    }
-  }
-
-  const getCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      toast.error('Geolocation is not supported by this browser.')
-      setLocationStatus('error')
-      return
-    }
-
-    setLocationStatus('detecting')
-
+  const locate = () => {
+    if (!navigator.geolocation) return toast.error('Location isn’t available in this browser')
+    setLocating(true)
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords
-
-        // Set the form values
-        setValue('latitude', latitude)
-        setValue('longitude', longitude)
-
-        setLocationStatus('success')
-        toast.success('Location detected successfully!')
-
-        // Optional: Reverse geocode to get address
-        reverseGeocode(latitude, longitude)
-      },
-      (error) => {
-        setLocationStatus('error')
-        let errorMessage = 'Could not get your location. '
-
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            errorMessage += 'Please allow location access.'
-            break
-          case error.POSITION_UNAVAILABLE:
-            errorMessage += 'Location information unavailable.'
-            break
-          case error.TIMEOUT:
-            errorMessage += 'Location request timed out.'
-            break
-          default:
-            errorMessage += 'An unknown error occurred.'
-            break
+      async ({ coords: c }) => {
+        setCoords({ latitude: c.latitude, longitude: c.longitude })
+        setLocating(false)
+        try {
+          const res = await fetch(
+            `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${c.latitude}&longitude=${c.longitude}&localityLanguage=en`,
+          )
+          const d = await res.json()
+          if (d.locality) setValue('address', [d.locality, d.principalSubdivision].filter(Boolean).join(', '), { shouldValidate: true })
+        } catch {
+          // Address autofill is a convenience only
         }
-
-        toast.error(errorMessage)
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 300000 // 5 minutes
-      }
+      (err) => {
+        setLocating(false)
+        toast.error(err.code === err.PERMISSION_DENIED ? 'Allow location access so we can match you with nearby requests' : 'Couldn’t get your location — try again')
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 },
     )
   }
 
-  const reverseGeocode = async (lat: number, lng: number) => {
-    try {
-      // Using a free geocoding service (you can replace with Google Maps API later)
-      const response = await fetch(
-        `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`
-      )
-      const data = await response.json()
-
-      if (data.locality && data.countryName) {
-        const address = `${data.locality}, ${data.principalSubdivision}, ${data.countryName}`
-        setValue('address', address)
-        toast.info('Address auto-filled based on your location!')
-      }
-    } catch (error) {
-      // Reverse geocoding failed - optional feature
-      // Don't show error to user, it's optional
+  const goNext = async () => {
+    if (await trigger(STEP_FIELDS[step] || [])) {
+      setStep((s) => s + 1)
+      if (step === 1 && !coords) locate()
     }
   }
 
-  // Auto-detect location when reaching step 2
-  const handleNext = async () => {
-    const fieldsToValidate = getFieldsForStep(activeStep)
-    const isValid = await trigger(fieldsToValidate)
-
-    if (isValid) {
-      setActiveStep((prev) => {
-        const nextStep = prev + 1
-        // Auto-detect location when reaching location step
-        if (nextStep === 2 && locationStatus === 'idle') {
-          setTimeout(() => getCurrentLocation(), 500)
-        }
-        return nextStep
+  const onSubmit = async (data: Form) => {
+    if (!coords) return toast.error('Share your location to finish — it’s how we match nearby requests')
+    const { confirmPassword, ...rest } = data
+    const body: Record<string, unknown> = {
+      name: rest.name,
+      email: rest.email,
+      phone: rest.phone,
+      password: rest.password,
+      address: rest.address,
+      role,
+      ...coords,
+    }
+    if (role === 'donor') {
+      Object.assign(body, {
+        bloodGroup: rest.bloodGroup,
+        dateOfBirth: rest.dateOfBirth,
+        weight: Number(rest.weight),
+        ...(rest.sex ? { sex: rest.sex } : {}),
+        ...(rare.length ? { rarePhenotypes: rare } : {}),
+      })
+    } else {
+      Object.assign(body, {
+        hospitalName: rest.hospitalName,
+        licenseNumber: rest.licenseNumber,
+        contactPerson: rest.contactPerson,
+        emergencyContact: rest.emergencyContact,
       })
     }
+    try {
+      await dispatch(registerUser(body)).unwrap()
+      toast.success(role === 'donor' ? 'Welcome! Complete your screening next so we only invite you when you can donate.' : 'Hospital account created')
+      router.push(next && next.startsWith('/') ? next : role === 'hospital' ? '/hospital/dashboard' : '/donor/dashboard')
+    } catch {
+      // shown inline
+    }
   }
 
-  const renderStepContent = (step: number) => {
-    switch (step) {
-      case 0:
-        return (
-          <Box>
-            <FormControl component="fieldset">
-              <FormLabel component="legend">I want to register as:</FormLabel>
-              <RadioGroup
-                value={userRole}
-                onChange={(e) => setUserRole(e.target.value as 'donor' | 'hospital')}
-              >
-                <FormControlLabel
-                  value="donor"
-                  control={<Radio />}
-                  label="Blood Donor - I want to donate blood and help save lives"
-                />
-                <FormControlLabel
-                  value="hospital"
-                  control={<Radio />}
-                  label="Hospital/Medical Facility - I need to request blood donations"
-                />
-              </RadioGroup>
-            </FormControl>
-          </Box>
-        )
+  const password = watch('password')
+  const today = new Date()
+  const maxDob = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate()).toISOString().slice(0, 10)
 
-      case 1:
-        return (
+  return (
+    <>
+      <Typography variant="overline" color="text.secondary">
+        Step {step + 1} of 3
+      </Typography>
+      <Typography variant="h2" component="h1" mb={1}>
+        {step === 0 ? (
+          <>
+            Join <em>DonorConnect</em>
+          </>
+        ) : step === 1 ? (
+          <>
+            About <em>you</em>
+          </>
+        ) : role === 'donor' ? (
+          <>
+            Your <em>blood</em>
+          </>
+        ) : (
+          <>
+            Your <em>hospital</em>
+          </>
+        )}
+      </Typography>
+      <Typography color="text.secondary" mb={4}>
+        {step === 0
+          ? 'Choose how you’ll use DonorConnect.'
+          : step === 1
+            ? 'We’ll only contact you about requests you can actually help with.'
+            : role === 'donor'
+              ? 'This decides which requests you match and when you’re eligible.'
+              : 'New hospitals are verified before their public links show a verified badge.'}
+      </Typography>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
+
+      <form onSubmit={handleSubmit(onSubmit)} noValidate>
+        {step === 0 && (
+          <Stack spacing={1.5}>
+            <RoleCard
+              active={role === 'donor'}
+              onClick={() => setRole('donor')}
+              icon={<VolunteerActivism />}
+              title="I want to donate"
+              body="Get a few well-matched invites, hold a slot when you can go, never get spammed."
+            />
+            <RoleCard
+              active={role === 'hospital'}
+              onClick={() => setRole('hospital')}
+              icon={<LocalHospital />}
+              title="I run a hospital or blood bank"
+              body="Request donors, track who’s coming, forecast shortages and share surplus."
+            />
+          </Stack>
+        )}
+
+        {step === 1 && (
           <Grid container spacing={2}>
             <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Full Name"
-                {...register('name', { required: 'Name is required' })}
-                error={!!errors.name}
-                helperText={errors.name?.message}
-              />
+              <TextField fullWidth label={role === 'hospital' ? 'Your name' : 'Full name'} autoComplete="name" {...register('name', { required: 'Enter your name' })} error={!!errors.name} helperText={errors.name?.message} />
             </Grid>
-            <Grid item xs={12}>
+            <Grid item xs={12} sm={7}>
               <TextField
                 fullWidth
-                label="Email Address"
+                label="Email"
                 type="email"
-                {...register('email', {
-                  required: 'Email is required',
-                  pattern: {
-                    value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                    message: 'Invalid email address'
-                  }
-                })}
+                autoComplete="email"
+                {...register('email', { required: 'Enter your email', pattern: { value: /^\S+@\S+\.\S+$/, message: 'Enter a valid email' } })}
                 error={!!errors.email}
                 helperText={errors.email?.message}
               />
             </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Phone Number"
-                {...register('phone', { required: 'Phone number is required' })}
-                error={!!errors.phone}
-                helperText={errors.phone?.message}
-              />
+            <Grid item xs={12} sm={5}>
+              <TextField fullWidth label="Mobile" type="tel" autoComplete="tel" {...register('phone', { required: 'Enter your mobile number' })} error={!!errors.phone} helperText={errors.phone?.message || 'For SMS invites'} />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 label="Password"
                 type="password"
-                {...register('password', {
-                  required: 'Password is required',
-                  minLength: {
-                    value: 6,
-                    message: 'Password must be at least 6 characters'
-                  }
-                })}
+                autoComplete="new-password"
+                {...register('password', { required: 'Choose a password', minLength: { value: 8, message: 'At least 8 characters' } })}
                 error={!!errors.password}
                 helperText={errors.password?.message}
               />
@@ -311,229 +277,218 @@ export default function RegisterPage() {
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
-                label="Confirm Password"
+                label="Confirm password"
                 type="password"
-                {...register('confirmPassword', {
-                  required: 'Please confirm your password',
-                  validate: (value) => value === password || 'Passwords do not match'
-                })}
+                autoComplete="new-password"
+                {...register('confirmPassword', { validate: (v) => v === password || 'Passwords don’t match' })}
                 error={!!errors.confirmPassword}
                 helperText={errors.confirmPassword?.message}
               />
             </Grid>
           </Grid>
-        )
+        )}
 
-      case 2:
-        return (
-          <Grid container spacing={2}>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Address"
-                multiline
-                rows={2}
-                {...register('address', { required: 'Address is required' })}
-                error={!!errors.address}
-                helperText={errors.address?.message}
-              />
-            </Grid>
-            {/* Hidden location fields */}
-            <input type="hidden" {...register('latitude', { required: true, valueAsNumber: true })} />
-            <input type="hidden" {...register('longitude', { required: true, valueAsNumber: true })} />
-
-            <Grid item xs={12}>
-              <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  📍 Location Detection
-                </Typography>
-                {locationStatus === 'detecting' && (
-                  <Box display="flex" alignItems="center" gap={1}>
-                    <CircularProgress size={16} />
-                    <Typography variant="body2">Getting your location...</Typography>
-                  </Box>
-                )}
-                {locationStatus === 'success' && (
-                  <Typography variant="body2" color="success.main">
-                    ✅ Location detected successfully!
+        {step === 2 && (
+          <Stack spacing={3}>
+            <Box sx={{ p: 2, borderRadius: 3, border: `1px solid ${coords ? t.successSoft : t.line}`, bgcolor: coords ? t.successSoft : t.surface }}>
+              <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
+                <Box>
+                  <Typography variant="body2" fontWeight={600}>
+                    {coords ? 'Location shared' : locating ? 'Finding you…' : 'Share your location'}
                   </Typography>
-                )}
-                {locationStatus === 'error' && (
-                  <Typography variant="body2" color="error.main">
-                    ❌ Could not detect location. Please enable location access.
-                  </Typography>
-                )}
-                <Button
-                  onClick={getCurrentLocation}
-                  variant="outlined"
-                  size="small"
-                  sx={{ mt: 1 }}
-                  disabled={locationStatus === 'detecting'}
-                >
-                  {locationStatus === 'success' ? 'Update Location' : 'Detect My Location'}
+                  <Typography variant="caption">Used to measure distance to hospitals. Never shown to anyone.</Typography>
+                </Box>
+                <Button size="small" variant={coords ? 'text' : 'contained'} startIcon={<MyLocation />} onClick={locate} disabled={locating}>
+                  {coords ? 'Update' : 'Share'}
                 </Button>
-              </Box>
-            </Grid>
-
-            {/* Donor-specific fields */}
-            {userRole === 'donor' && (
-              <>
-                <Grid item xs={12} sm={4}>
-                  <FormControl fullWidth>
-                    <InputLabel>Blood Group</InputLabel>
-                    <Select
-                      {...register('bloodGroup', { required: 'Blood group is required' })}
-                      label="Blood Group"
-                      error={!!errors.bloodGroup}
-                    >
-                      {bloodGroups.map((group) => (
-                        <MenuItem key={group} value={group}>
-                          {group}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <TextField
-                    fullWidth
-                    label="Date of Birth"
-                    type="date"
-                    InputLabelProps={{ shrink: true }}
-                    {...register('dateOfBirth', { required: 'Date of birth is required' })}
-                    error={!!errors.dateOfBirth}
-                    helperText={errors.dateOfBirth?.message}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <TextField
-                    fullWidth
-                    label="Weight (kg)"
-                    type="number"
-                    {...register('weight', {
-                      required: 'Weight is required',
-                      min: { value: 45, message: 'Minimum weight is 45kg' },
-                      valueAsNumber: true
-                    })}
-                    error={!!errors.weight}
-                    helperText={errors.weight?.message}
-                  />
-                </Grid>
-              </>
-            )}
-
-            {/* Hospital-specific fields */}
-            {userRole === 'hospital' && (
-              <>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Hospital Name"
-                    {...register('hospitalName', { required: 'Hospital name is required' })}
-                    error={!!errors.hospitalName}
-                    helperText={errors.hospitalName?.message}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="License Number"
-                    {...register('licenseNumber', { required: 'License number is required' })}
-                    error={!!errors.licenseNumber}
-                    helperText={errors.licenseNumber?.message}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="Contact Person"
-                    {...register('contactPerson', { required: 'Contact person is required' })}
-                    error={!!errors.contactPerson}
-                    helperText={errors.contactPerson?.message}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Emergency Contact"
-                    {...register('emergencyContact', { required: 'Emergency contact is required' })}
-                    error={!!errors.emergencyContact}
-                    helperText={errors.emergencyContact?.message}
-                  />
-                </Grid>
-              </>
-            )}
-          </Grid>
-        )
-
-      default:
-        return null
-    }
-  }
-
-  return (
-    <Container component="main" maxWidth="md">
-      <Box sx={{ marginTop: 4, marginBottom: 4 }}>
-        <Paper elevation={3} sx={{ padding: 4 }}>
-          <Typography component="h1" variant="h4" align="center" gutterBottom>
-            Create Account
-          </Typography>
-
-          <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
-            {steps.map((label) => (
-              <Step key={label}>
-                <StepLabel>{label}</StepLabel>
-              </Step>
-            ))}
-          </Stepper>
-
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
-            </Alert>
-          )}
-
-          <form onSubmit={handleSubmit(onSubmit)}>
-            {renderStepContent(activeStep)}
-
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
-              <Button
-                disabled={activeStep === 0}
-                onClick={handleBack}
-              >
-                Back
-              </Button>
-
-              {activeStep === steps.length - 1 ? (
-                <Button
-                  type="submit"
-                  variant="contained"
-                  disabled={loading}
-                >
-                  {loading ? <CircularProgress size={24} /> : 'Create Account'}
-                </Button>
-              ) : (
-                <Button
-                  variant="contained"
-                  onClick={handleNext}
-                >
-                  Next
-                </Button>
-              )}
+              </Stack>
             </Box>
-          </form>
+            <TextField fullWidth label="Area / address" {...register('address', { required: 'Enter your area' })} error={!!errors.address} helperText={errors.address?.message} />
 
-          <Box textAlign="center" mt={2}>
-            <Link
-              component="button"
-              variant="body2"
-              onClick={() => router.push('/auth/login')}
-            >
-              Already have an account? Sign In
-            </Link>
-          </Box>
-        </Paper>
-      </Box>
-    </Container>
+            {role === 'donor' ? (
+              <>
+                <Box>
+                  <Typography variant="subtitle2" mb={1}>
+                    Blood group
+                  </Typography>
+                  <Controller
+                    name="bloodGroup"
+                    control={control}
+                    rules={{ required: 'Choose your blood group' }}
+                    render={({ field }) => (
+                      <ToggleButtonGroup
+                        exclusive
+                        value={field.value}
+                        onChange={(_, v) => v && field.onChange(v)}
+                        sx={{
+                          flexWrap: 'wrap',
+                          gap: 0.75,
+                          '& .MuiToggleButton-root': {
+                            minWidth: 56,
+                            border: `1px solid ${t.lineStrong} !important`,
+                            borderRadius: '999px !important',
+                            fontWeight: 700,
+                            color: t.ink,
+                            '&.Mui-selected, &.Mui-selected:hover': { bgcolor: t.red, color: '#FFF9F3', borderColor: `${t.red} !important` },
+                          },
+                        }}
+                      >
+                        {BLOOD_GROUPS.map((g) => (
+                          <ToggleButton key={g} value={g}>
+                            {g}
+                          </ToggleButton>
+                        ))}
+                      </ToggleButtonGroup>
+                    )}
+                  />
+                  {errors.bloodGroup && (
+                    <Typography variant="caption" color="error" display="block" mt={0.75}>
+                      {errors.bloodGroup.message}
+                    </Typography>
+                  )}
+                </Box>
+                <Box>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={5}>
+                    <TextField
+                      fullWidth
+                      type="date"
+                      label="Date of birth"
+                      InputLabelProps={{ shrink: true }}
+                      inputProps={{ max: maxDob }}
+                      {...register('dateOfBirth', { required: 'Enter your date of birth' })}
+                      error={!!errors.dateOfBirth}
+                      helperText={errors.dateOfBirth?.message || 'Donors must be 18+'}
+                    />
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Weight (kg)"
+                      {...register('weight', { required: 'Required', min: { value: 45, message: 'Minimum 45 kg' }, valueAsNumber: true })}
+                      error={!!errors.weight}
+                      helperText={errors.weight?.message}
+                    />
+                  </Grid>
+                  <Grid item xs={6} sm={4}>
+                    <Controller
+                      name="sex"
+                      control={control}
+                      render={({ field }) => (
+                        <TextField select fullWidth label="Sex" {...field} helperText="Optional">
+                          <MenuItem value="female">Female</MenuItem>
+                          <MenuItem value="male">Male</MenuItem>
+                          <MenuItem value="other">Prefer not to say</MenuItem>
+                        </TextField>
+                      )}
+                    />
+                  </Grid>
+                </Grid>
+                </Box>
+                <Box>
+                  <Button size="small" onClick={() => setShowRare((s) => !s)} sx={{ ml: -1.5 }}>
+                    {showRare ? 'Hide rare blood types' : 'I’ve been told I have a rare blood type'}
+                  </Button>
+                  <Collapse in={showRare}>
+                    <Stack direction="row" flexWrap="wrap" useFlexGap gap={1} mt={1}>
+                      {Object.entries(RARE_PHENOTYPES).map(([code, label]) => {
+                        const on = rare.includes(code)
+                        return (
+                          <Chip
+                            key={code}
+                            label={label}
+                            onClick={() => setRare((r) => (on ? r.filter((x) => x !== code) : [...r, code]))}
+                            variant={on ? 'filled' : 'outlined'}
+                            sx={{ bgcolor: on ? t.red : 'transparent', color: on ? '#FFF9F3' : t.ink, '&:hover': { bgcolor: on ? t.redDark : t.sunken } }}
+                          />
+                        )
+                      })}
+                    </Stack>
+                  </Collapse>
+                </Box>
+              </>
+            ) : (
+              <Box>
+              <Grid container spacing={2}>
+                <Grid item xs={12}>
+                  <TextField fullWidth label="Hospital name" {...register('hospitalName', { required: 'Required' })} error={!!errors.hospitalName} helperText={errors.hospitalName?.message} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField fullWidth label="Blood bank license no." {...register('licenseNumber', { required: 'Required' })} error={!!errors.licenseNumber} helperText={errors.licenseNumber?.message} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField fullWidth label="Contact person" {...register('contactPerson', { required: 'Required' })} error={!!errors.contactPerson} helperText={errors.contactPerson?.message} />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Blood bank phone (24×7)"
+                    {...register('emergencyContact', { required: 'Required' })}
+                    error={!!errors.emergencyContact}
+                    helperText={errors.emergencyContact?.message || 'Shared with donors once they commit'}
+                  />
+                </Grid>
+              </Grid>
+              </Box>
+            )}
+          </Stack>
+        )}
+
+        <Stack direction="row" justifyContent="space-between" mt={4}>
+          <Button onClick={() => setStep((s) => s - 1)} disabled={step === 0} sx={{ visibility: step === 0 ? 'hidden' : 'visible' }}>
+            Back
+          </Button>
+          {step < 2 ? (
+            <Button variant="contained" size="large" onClick={goNext}>
+              Continue
+            </Button>
+          ) : (
+            <Button type="submit" variant="contained" size="large" disabled={loading}>
+              {loading ? 'Creating account…' : 'Create account'}
+            </Button>
+          )}
+        </Stack>
+      </form>
+
+      <Typography variant="body2" color="text.secondary" mt={4}>
+        Already registered?{' '}
+        <Link href={`/auth/login${next ? `?next=${encodeURIComponent(next)}` : ''}`} style={{ color: 'inherit', fontWeight: 600 }}>
+          Sign in
+        </Link>
+      </Typography>
+    </>
+  )
+}
+
+export default function RegisterPage() {
+  return (
+    <AuthLayout
+      aside={
+        <>
+          <Typography sx={{ fontFamily: 'var(--font-serif)', fontSize: 44, lineHeight: 1.08, letterSpacing: '-0.015em' }}>
+            One donation can help <em>three people.</em>
+          </Typography>
+          <Stack spacing={2} mt={4} sx={{ color: 'rgba(243,236,224,0.72)', maxWidth: 380 }}>
+            {[
+              'Invited only when you match and can actually donate',
+              'Hold a slot so nobody makes a wasted trip',
+              'Stood down the moment a request is covered',
+            ].map((s) => (
+              <Stack key={s} direction="row" spacing={1.5} alignItems="flex-start">
+                <CheckCircle sx={{ fontSize: 18, color: '#E0484F', mt: '2px' }} />
+                <Typography variant="body2" color="inherit">
+                  {s}
+                </Typography>
+              </Stack>
+            ))}
+          </Stack>
+        </>
+      }
+    >
+      <Suspense>
+        <RegisterForm />
+      </Suspense>
+    </AuthLayout>
   )
 }

@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AlertsService } from './alerts.service';
 import { AlertsController } from './alerts.controller';
+import { PublicController } from './public.controller';
+import { SmsController } from './sms.controller';
 import { Alert, AlertSchema } from '../schemas/alert.schema';
 import { Donor, DonorSchema } from '../schemas/donor.schema';
 import { Hospital, HospitalSchema } from '../schemas/hospital.schema';
@@ -20,7 +22,7 @@ import { SocketModule } from '../socket/socket.module';
     NotificationsModule,
     SocketModule,
   ],
-  controllers: [AlertsController],
+  controllers: [AlertsController, PublicController, SmsController],
   providers: [AlertsService],
   exports: [AlertsService],
 })

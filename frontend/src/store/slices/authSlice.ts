@@ -1,111 +1,58 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
-import { authAPI } from '@/services/api'
+import { api, tokenStore } from '@/lib/api'
+import { disconnectSocket } from '@/lib/socket'
+import type { User } from '@/lib/types'
 
-export interface User {
-  id: string
-  name: string
-  email: string
-  role: 'donor' | 'hospital' | 'admin'
-  phone: string
-  address: string
-  location: {
-    type: string
-    coordinates: [number, number]
-  }
-  // Donor-specific fields
-  bloodGroup?: string
-  dateOfBirth?: string
-  weight?: number
-  // Hospital-specific fields
-  hospitalName?: string
-  licenseNumber?: string
-  contactPerson?: string
-  emergencyContact?: string
-}
+export type { User }
 
 interface AuthState {
   user: User | null
   token: string | null
   isAuthenticated: boolean
+  /** false until we've read localStorage on the client — avoids redirect flicker */
+  ready: boolean
   loading: boolean
   error: string | null
 }
 
-// Load user data from localStorage
-const loadUserFromStorage = (): User | null => {
-  if (typeof window === 'undefined') return null
-  try {
-    const userData = localStorage.getItem('user')
-    return userData ? JSON.parse(userData) : null
-  } catch {
-    return null
-  }
-}
-
-// Load token from localStorage
-const loadTokenFromStorage = (): string | null => {
-  if (typeof window === 'undefined') return null
-  try {
-    return localStorage.getItem('token')
-  } catch {
-    return null
-  }
-}
-
+// Start empty on both server and client so hydration matches; AuthWrapper restores.
 const initialState: AuthState = {
-  user: loadUserFromStorage(),
-  token: loadTokenFromStorage(),
-  isAuthenticated: !!(loadUserFromStorage() && loadTokenFromStorage()),
+  user: null,
+  token: null,
+  isAuthenticated: false,
+  ready: false,
   loading: false,
   error: null,
 }
 
-interface LoginResponse {
-  user: User
-  token: string
+const persist = (data: { user: User; token: string }) => {
+  tokenStore.set(data.token)
+  try {
+    localStorage.setItem('user', JSON.stringify(data.user))
+  } catch {}
+  return data
 }
 
-export const login = createAsyncThunk<LoginResponse, { email: string; password: string }>(
-  'auth/login',
-  async (credentials) => {
-    const data = await authAPI.login(credentials)
-    localStorage.setItem('token', data.token)
-    localStorage.setItem('user', JSON.stringify(data.user))
-    return data as LoginResponse
-  }
+export const login = createAsyncThunk('auth/login', async (credentials: { email: string; password: string }) =>
+  persist(await api.auth.login(credentials)),
 )
 
-export const register = createAsyncThunk<LoginResponse, any>(
-  'auth/register',
-  async (userData) => {
-    const data = await authAPI.register(userData)
-    localStorage.setItem('token', data.token)
-    localStorage.setItem('user', JSON.stringify(data.user))
-    return data as LoginResponse
-  }
+export const register = createAsyncThunk('auth/register', async (userData: Record<string, unknown>) =>
+  persist(await api.auth.register(userData)),
 )
 
-export const updateProfile = createAsyncThunk<User, Partial<User>>(
-  'auth/updateProfile',
-  async (profileData, { getState }) => {
-    const state = getState() as { auth: AuthState }
-    const currentUser = state.auth.user
-    
-    if (!currentUser) throw new Error('No user logged in')
-    
-    // Merge current user data with updates
-    const updatedUser = { ...currentUser, ...profileData }
-    
-    // Save to localStorage (since backend might be down)
-    localStorage.setItem('user', JSON.stringify(updatedUser))
-    
-    return updatedUser
-  }
-)
+/** Re-validate the stored session with the server and refresh the cached user. */
+export const refreshUser = createAsyncThunk('auth/refresh', async () => {
+  const user = await api.auth.me()
+  try {
+    localStorage.setItem('user', JSON.stringify(user))
+  } catch {}
+  return user
+})
 
 export const logout = createAsyncThunk('auth/logout', async () => {
-  localStorage.removeItem('token')
-  localStorage.removeItem('user')
+  tokenStore.clear()
+  disconnectSocket()
 })
 
 const authSlice = createSlice({
@@ -115,62 +62,43 @@ const authSlice = createSlice({
     clearError: (state) => {
       state.error = null
     },
-    setCredentials: (state, action: PayloadAction<{ user: User; token: string }>) => {
-      state.user = action.payload.user
-      state.token = action.payload.token
-      state.isAuthenticated = true
-      localStorage.setItem('user', JSON.stringify(action.payload.user))
-      localStorage.setItem('token', action.payload.token)
-    },
-  },
-  extraReducers: (builder) => {
-    builder
-      // Login
-      .addCase(login.pending, (state) => {
-        state.loading = true
-        state.error = null
-      })
-      .addCase(login.fulfilled, (state, action) => {
-        state.loading = false
+    restore: (state, action: PayloadAction<{ user: User; token: string } | null>) => {
+      if (action.payload) {
         state.user = action.payload.user
         state.token = action.payload.token
         state.isAuthenticated = true
-        state.error = null
-      })
+      }
+      state.ready = true
+    },
+  },
+  extraReducers: (builder) => {
+    const pending = (state: AuthState) => {
+      state.loading = true
+      state.error = null
+    }
+    const fulfilled = (state: AuthState, action: PayloadAction<{ user: User; token: string }>) => {
+      state.loading = false
+      state.user = action.payload.user
+      state.token = action.payload.token
+      state.isAuthenticated = true
+      state.ready = true
+    }
+    builder
+      .addCase(login.pending, pending)
+      .addCase(login.fulfilled, fulfilled)
       .addCase(login.rejected, (state, action) => {
         state.loading = false
         state.error = action.error.message || 'Login failed'
       })
-      // Register
-      .addCase(register.pending, (state) => {
-        state.loading = true
-        state.error = null
-      })
-      .addCase(register.fulfilled, (state, action) => {
-        state.loading = false
-        state.user = action.payload.user
-        state.token = action.payload.token
-        state.isAuthenticated = true
-        state.error = null
-      })
+      .addCase(register.pending, pending)
+      .addCase(register.fulfilled, fulfilled)
       .addCase(register.rejected, (state, action) => {
         state.loading = false
         state.error = action.error.message || 'Registration failed'
       })
-      // Update Profile
-      .addCase(updateProfile.pending, (state) => {
-        state.loading = true
-        state.error = null
-      })
-      .addCase(updateProfile.fulfilled, (state, action) => {
-        state.loading = false
+      .addCase(refreshUser.fulfilled, (state, action) => {
         state.user = action.payload
       })
-      .addCase(updateProfile.rejected, (state, action) => {
-        state.loading = false
-        state.error = action.error.message || 'Profile update failed'
-      })
-      // Logout
       .addCase(logout.fulfilled, (state) => {
         state.user = null
         state.token = null
@@ -179,5 +107,5 @@ const authSlice = createSlice({
   },
 })
 
-export const { clearError, setCredentials } = authSlice.actions
+export const { clearError, restore } = authSlice.actions
 export default authSlice.reducer

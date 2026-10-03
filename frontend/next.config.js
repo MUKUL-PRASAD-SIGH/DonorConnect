@@ -7,14 +7,12 @@ const withPWA = require('next-pwa')({
 })
 
 const nextConfig = {
-  // Remove 'output: export' for Vercel deployment
   trailingSlash: true,
   images: {
     unoptimized: true
   },
-  env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'https://api.bloodme.demo'
-  }
+  // NEXT_PUBLIC_API_URL is read at build time from the environment; there is no
+  // silent fallback to a fake host — src/lib/api.ts defaults to localhost in dev.
 }
 
 module.exports = withPWA(nextConfig)

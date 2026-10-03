@@ -1,6 +1,7 @@
-import { IsEmail, IsString, IsEnum, IsOptional, IsNumber, IsDateString, IsArray, ValidateNested, IsPhoneNumber } from 'class-validator';
+import { IsEmail, IsString, IsEnum, IsOptional, IsNumber, IsDateString, IsArray, ValidateNested, IsIn, MinLength, MaxLength } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { UserRole, BloodGroup } from '../../schemas/user.schema';
+import { RARE_PHENOTYPES } from '../../common/blood';
 
 class LocationDto {
   @IsString()
@@ -19,6 +20,8 @@ export class RegisterDto {
   email: string;
 
   @IsString()
+  @MinLength(8)
+  @MaxLength(128)
   password: string;
 
   // Frontend sends confirmPassword but we don't need to validate it in backend
@@ -29,7 +32,8 @@ export class RegisterDto {
   @IsString()
   phone: string;
 
-  @IsEnum(UserRole)
+  // Admin accounts are never self-registered
+  @IsIn([UserRole.DONOR, UserRole.HOSPITAL])
   role: UserRole;
 
   @IsString()
@@ -62,6 +66,15 @@ export class RegisterDto {
   @IsOptional()
   @IsNumber()
   weight?: number;
+
+  @IsOptional()
+  @IsIn(['male', 'female', 'other'])
+  sex?: 'male' | 'female' | 'other';
+
+  @IsOptional()
+  @IsArray()
+  @IsIn(Object.keys(RARE_PHENOTYPES), { each: true })
+  rarePhenotypes?: string[];
 
   // Hospital-specific fields
   @IsOptional()

@@ -6,8 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { DonorsModule } from './donors/donors.module';
 import { HospitalsModule } from './hospitals/hospitals.module';
 import { AlertsModule } from './alerts/alerts.module';
-import { CampsModule } from './camps/camps.module';
-import { RewardsModule } from './rewards/rewards.module';
+import { InventoryModule } from './inventory/inventory.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SocketModule } from './socket/socket.module';
 
@@ -19,7 +18,6 @@ import { SocketModule } from './socket/socket.module';
     MongooseModule.forRoot(
       process.env.MONGODB_URI || 'mongodb://localhost:27017/blood-donor-system',
       {
-        // Add connection options for better error handling
         serverSelectionTimeoutMS: 5000,
         socketTimeoutMS: 45000,
       }
@@ -28,8 +26,7 @@ import { SocketModule } from './socket/socket.module';
     DonorsModule,
     HospitalsModule,
     AlertsModule,
-    CampsModule,
-    RewardsModule,
+    InventoryModule,
     NotificationsModule,
     SocketModule,
   ],
