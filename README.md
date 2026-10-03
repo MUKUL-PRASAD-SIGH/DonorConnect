@@ -1,6 +1,6 @@
-# 🩸 Blood Donor & Alert System
+# 🩸 DonorConnect
 
-> **Connecting hospitals with blood donors through real-time alerts and community engagement**
+> **Coordinated blood response: the right donors, the right number, at the right time.**
 
 A comprehensive platform that bridges the gap between hospitals needing blood donations and willing donors through intelligent geospatial matching, multi-channel notifications, and real-time coordination.
 
@@ -9,19 +9,34 @@ A comprehensive platform that bridges the gap between hospitals needing blood do
 ![Node.js](https://img.shields.io/badge/Node.js-18+-green)
 ![MongoDB](https://img.shields.io/badge/Database-MongoDB-green)
 
-## ✨ Key Features
+## ✨ What makes it different
 
-- 🚨 **Real-Time Blood Alerts** - Instant notifications when blood is needed
-- 📍 **Geospatial Matching** - Find donors within configurable radius
-- 📱 **Multi-Channel Notifications** - SMS, Email, and Push notifications
-- 🏥 **Hospital Dashboard** - Manage alerts, inventory, and responses
-- 🩸 **Donor Dashboard** - View alerts, track donations, earn rewards
-- 🔐 **Secure Authentication** - JWT with role-based access control
-- 🌍 **Auto-Location Detection** - Seamless location-based matching
-- 📊 **Real-Time Updates** - Live dashboard updates via WebSocket
-- 🐳 **Docker Ready** - Complete containerization for easy deployment
+Real-time alerts are table stakes. DonorConnect coordinates the response:
+
+- **Wave dispatch with held slots.** Requests invite a small ranked wave (distance, track record, eligibility) and widen the radius only if needed. Each "yes" holds one unit's slot. Extra yeses go to standby and are promoted automatically. Once covered, pending invitees are stood down.
+- **Expected units, not raw yeses.** Hospitals see the units they can count on, weighted by each donor's show-up history.
+- **Verified live request links.** Every request has a public `/r/<code>` page and QR. When the request is covered, old WhatsApp forwards show "please don't travel". Unverified hospitals are flagged, and the page carries a no-payment anti-scam notice.
+- **Component-aware eligibility.** A pre-screen gives exact next-eligible dates for whole blood, platelets and plasma, so donors who'd be turned away are never invited.
+- **Rare-blood registry.** Bombay, Rh-null and other rare phenotypes escalate from city to nationwide. Labs at verified hospitals can confirm phenotypes.
+- **Shortage forecasting.** Usage trends plus seasonal drivers (such as platelets in dengue season) flag shortfalls days ahead and schedule donors calmly.
+- **Expiry-aware exchange.** Units projected to expire unused are matched to nearby hospitals forecast to run short.
+- **SMS replies.** Donors without data can text `YES K7Q2` / `NO K7Q2` (Twilio webhook at `POST /sms/inbound`).
 
 ## 🚀 Quick Start
+
+```bash
+npm install                                   # root workspace installs backend + frontend
+docker run -d --name donorconnect-mongo -p 27017:27017 mongo:7
+cp backend/.env.example backend/.env          # set JWT_SECRET; AUTO_VERIFY_HOSPITALS=true for local dev
+npm run seed -w backend -- --reset            # demo hospitals, donors, stock and a live request
+npm run dev                                   # API on :3001, web on :3000
+```
+
+Every seeded account uses the password `password123`: `gh@donorconnect.demo` / `adyar@donorconnect.demo` (hospitals), `donor@donorconnect.demo` (donor), `admin@donorconnect.demo` (verifies hospitals at `/admin`).
+
+Tests: `npm test -w backend` (unit) and `npm run test:e2e -w backend` (needs MongoDB, default `mongodb://localhost:27099`; set `E2E_MONGODB_URI` to override).
+
+> Eligibility thresholds in `backend/src/eligibility/rules.ts` and the seasonal factors in `backend/src/inventory/forecast.ts` are configurable defaults. The collecting blood bank's medical officer always makes the final call.
 
 ## 🚀 Project Status & Summary
 

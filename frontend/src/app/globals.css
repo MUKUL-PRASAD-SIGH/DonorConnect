@@ -1,30 +1,104 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+:root {
+  --font-sans: 'Inter Variable';
+  --font-serif: 'Instrument Serif';
+  --paper: #f3ece0;
+  --surface: #fbf7f0;
+  --sunken: #ede4d5;
+  --line: #e0d5c3;
+  --line-strong: #cdbfa9;
+  --ink: #1e1916;
+  --ink-muted: #6a5f55;
+  --ink-subtle: #958879;
+  --red: #9e1b22;
+  --red-dark: #7c1219;
+  --red-soft: #f2dcd7;
+  --success: #2e6a4f;
+  --warning: #9a6512;
 
-/* Custom animations for the Blood Donor System */
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+  color-scheme: light;
 }
 
-@keyframes heartbeat {
-  0%, 100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.1);
-  }
+html {
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-@keyframes slideInUp {
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+::selection {
+  background: var(--red-soft);
+  color: var(--red-dark);
+}
+
+/* Italic serif accents inside headings: <h1>Blood, <em>coordinated</em></h1> */
+h1 em,
+h2 em,
+h3 em,
+.accent {
+  font-family: var(--font-serif), Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+h4 em,
+h5 em,
+h6 em {
+  font-family: var(--font-serif), Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 1.12em;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Lenis smooth scrolling */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+/* Paper grain — very subtle, adds warmth without noise */
+.grain {
+  position: relative;
+  isolation: isolate;
+}
+.grain::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.45 0 0 0 0 0.35 0 0 0 0 0.25 0 0 0 0.06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Enter animation for content blocks — ease-out, short, staggered */
+@keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(30px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -32,178 +106,71 @@
   }
 }
 
-@keyframes fadeInScale {
-  from {
-    opacity: 0;
-    transform: scale(0.9);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+.rise {
+  animation: rise 420ms var(--ease-out) both;
 }
 
-/* Blood drop animation */
-@keyframes bloodDrop {
+.stagger > * {
+  animation: rise 420ms var(--ease-out) both;
+}
+.stagger > *:nth-child(2) { animation-delay: 50ms; }
+.stagger > *:nth-child(3) { animation-delay: 100ms; }
+.stagger > *:nth-child(4) { animation-delay: 150ms; }
+.stagger > *:nth-child(5) { animation-delay: 200ms; }
+.stagger > *:nth-child(n + 6) { animation-delay: 240ms; }
+
+/* Live indicator — the one looping animation we allow, only on live state */
+@keyframes live-ring {
   0% {
-    transform: translateY(-10px) scale(1);
-    opacity: 0;
-  }
-  50% {
-    opacity: 1;
+    transform: scale(0.8);
+    opacity: 0.55;
   }
   100% {
-    transform: translateY(10px) scale(1.1);
+    transform: scale(2.4);
     opacity: 0;
   }
 }
-
-/* Glow effect for emergency alerts */
-@keyframes glow {
-  0%, 100% {
-    box-shadow: 0 0 5px rgba(244, 67, 54, 0.5);
-  }
-  50% {
-    box-shadow: 0 0 20px rgba(244, 67, 54, 0.8), 0 0 30px rgba(244, 67, 54, 0.6);
-  }
-}
-
-/* Utility classes */
-.animate-pulse {
-  animation: pulse 2s infinite;
-}
-
-.animate-heartbeat {
-  animation: heartbeat 1.5s ease-in-out infinite;
-}
-
-.animate-slideInUp {
-  animation: slideInUp 0.6s ease-out;
-}
-
-.animate-fadeInScale {
-  animation: fadeInScale 0.5s ease-out;
-}
-
-.animate-bloodDrop {
-  animation: bloodDrop 3s ease-in-out infinite;
-}
-
-.animate-glow {
-  animation: glow 2s ease-in-out infinite;
-}
-
-/* Hover effects */
-.hover-lift {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.hover-lift:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-}
-
-/* Blood theme colors */
-.blood-gradient {
-  background: linear-gradient(135deg, #d32f2f 0%, #f44336 100%);
-}
-
-.success-gradient {
-  background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);
-}
-
-.warning-gradient {
-  background: linear-gradient(135deg, #ff9800 0%, #ffb74d 100%);
-}
-
-.info-gradient {
-  background: linear-gradient(135deg, #2196f3 0%, #42a5f5 100%);
-}
-
-/* Custom scrollbar */
-::-webkit-scrollbar {
+.live-dot {
+  position: relative;
+  display: inline-block;
   width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+}
+.live-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: currentColor;
+  animation: live-ring 1.8s var(--ease-out) infinite;
 }
 
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #d32f2f;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #b71c1c;
-}
-
-/* Leaflet map styles */
-.leaflet-container {
-  height: 100%;
-  width: 100%;
-  border-radius: 12px;
-}
-
-.leaflet-popup-content-wrapper {
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-}
-
-.leaflet-popup-tip {
-  background: white;
-}
-
-/* Custom marker animations */
-@keyframes markerBounce {
-  0%, 20%, 50%, 80%, 100% {
-    transform: translateY(0);
+/* Hover lift only on devices with a real pointer */
+@media (hover: hover) and (pointer: fine) {
+  .lift {
+    transition: transform 200ms var(--ease-out), border-color 150ms ease;
   }
-  40% {
-    transform: translateY(-10px);
-  }
-  60% {
-    transform: translateY(-5px);
+  .lift:hover {
+    transform: translateY(-2px);
+    border-color: var(--line-strong);
   }
 }
 
-.marker-bounce {
-  animation: markerBounce 2s infinite;
-}
-
-/* Map loading animation */
-@keyframes mapLoad {
-  0% {
-    opacity: 0;
-    transform: scale(0.9);
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .stagger > * {
+    animation: fade 200ms ease both;
   }
-  100% {
-    opacity: 1;
-    transform: scale(1);
+  .live-dot::after {
+    animation: none;
   }
-}
-
-.map-container {
-  animation: mapLoad 0.5s ease-out;
-}
-
-/* Emergency alert pulse on map */
-@keyframes emergencyPulse {
-  0% {
-    transform: scale(1);
-    opacity: 1;
+  .lift:hover {
+    transform: none;
   }
-  50% {
-    transform: scale(1.2);
-    opacity: 0.7;
+  @keyframes fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-.emergency-marker {
-  animation: emergencyPulse 1.5s infinite;
 }

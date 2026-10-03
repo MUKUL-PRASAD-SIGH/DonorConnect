@@ -88,7 +88,12 @@ dist
 
 # Gatsby files
 .cache/
-public
+
+# next-pwa build output (generated on every build)
+frontend/public/sw.js
+frontend/public/sw.js.map
+frontend/public/workbox-*.js
+frontend/public/workbox-*.js.map
 
 # Storybook build outputs
 .out
@@ -128,3 +133,4 @@ Thumbs.db
 # Backup files
 *.backup
 *.bak
+.vercel

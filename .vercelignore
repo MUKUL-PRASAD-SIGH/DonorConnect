@@ -1,0 +1,7 @@
+backend/
+node_modules/
+.git/
+*.md
+docker-compose.yml
+Dockerfile
+.env

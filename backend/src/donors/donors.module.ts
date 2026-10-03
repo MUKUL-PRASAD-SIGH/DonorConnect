@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { DonorsService } from './donors.service';
 import { DonorsController } from './donors.controller';
+import { RegistryController } from './registry.controller';
 import { Donor, DonorSchema } from '../schemas/donor.schema';
 import { User, UserSchema } from '../schemas/user.schema';
 
@@ -12,7 +13,7 @@ import { User, UserSchema } from '../schemas/user.schema';
       { name: User.name, schema: UserSchema },
     ]),
   ],
-  controllers: [DonorsController],
+  controllers: [DonorsController, RegistryController],
   providers: [DonorsService],
   exports: [DonorsService],
 })

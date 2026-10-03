@@ -1,0 +1,17 @@
+{
+  "name": "DonorConnect — Coordinated blood response",
+  "short_name": "DonorConnect",
+  "description": "Ranked donor invites with held slots, live request links, eligibility and shortage forecasting.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F3ECE0",
+  "theme_color": "#F3ECE0",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

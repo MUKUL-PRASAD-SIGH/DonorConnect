@@ -1,6 +1,8 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
+export { BloodGroup } from '../common/blood';
+
 export type UserDocument = User & Document;
 
 export enum UserRole {
@@ -9,26 +11,16 @@ export enum UserRole {
   ADMIN = 'admin',
 }
 
-export enum BloodGroup {
-  A_POSITIVE = 'A+',
-  A_NEGATIVE = 'A-',
-  B_POSITIVE = 'B+',
-  B_NEGATIVE = 'B-',
-  AB_POSITIVE = 'AB+',
-  AB_NEGATIVE = 'AB-',
-  O_POSITIVE = 'O+',
-  O_NEGATIVE = 'O-',
-}
-
 @Schema({ timestamps: true })
 export class User {
   @Prop({ required: true })
   name: string;
 
-  @Prop({ required: true, unique: true })
+  @Prop({ required: true, unique: true, lowercase: true, trim: true })
   email: string;
 
-  @Prop({ required: true })
+  // Never returned unless explicitly selected with '+password'
+  @Prop({ required: true, select: false })
   password: string;
 
   @Prop({ required: true })
@@ -58,12 +50,6 @@ export class User {
 
   @Prop({ default: true })
   isActive: boolean;
-
-  @Prop({ default: Date.now })
-  createdAt: Date;
-
-  @Prop({ default: Date.now })
-  updatedAt: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

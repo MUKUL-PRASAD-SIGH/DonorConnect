@@ -1,15 +1,12 @@
-import { IsEnum, IsOptional, IsDateString, IsString } from 'class-validator';
-import { ResponseStatus } from '../../schemas/alert.schema';
+import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class RespondToAlertDto {
-  @IsEnum(ResponseStatus)
-  status: ResponseStatus;
-
-  @IsOptional()
-  @IsDateString()
-  estimatedArrival?: string;
+  // accept: hold a slot (or join standby) · decline: not this time · withdraw: cancel after accepting
+  @IsIn(['accept', 'decline', 'withdraw'])
+  action: 'accept' | 'decline' | 'withdraw';
 
   @IsOptional()
   @IsString()
+  @MaxLength(300)
   notes?: string;
 }

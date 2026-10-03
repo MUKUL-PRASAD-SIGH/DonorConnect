@@ -1,12 +1,11 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
-import { BloodGroup } from './user.schema';
 
 export type HospitalDocument = Hospital & Document;
 
 @Schema({ timestamps: true })
 export class Hospital {
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true, unique: true })
   userId: Types.ObjectId;
 
   @Prop({ required: true })
@@ -21,29 +20,14 @@ export class Hospital {
   @Prop({ required: true })
   emergencyContact: string;
 
-  @Prop({
-    type: Map,
-    of: Number,
-    default: new Map([
-      [BloodGroup.A_POSITIVE, 0],
-      [BloodGroup.A_NEGATIVE, 0],
-      [BloodGroup.B_POSITIVE, 0],
-      [BloodGroup.B_NEGATIVE, 0],
-      [BloodGroup.AB_POSITIVE, 0],
-      [BloodGroup.AB_NEGATIVE, 0],
-      [BloodGroup.O_POSITIVE, 0],
-      [BloodGroup.O_NEGATIVE, 0],
-    ])
-  })
-  bloodInventory: Map<BloodGroup, number>;
-
-  @Prop({ default: 50 }) // Default capacity in units
-  totalCapacity: number;
-
-  @Prop({ default: true })
+  // Only verified hospitals get the "Verified" badge on public request links
+  @Prop({ default: false })
   isVerified: boolean;
 
-  @Prop({ default: [] })
+  @Prop()
+  verifiedAt: Date;
+
+  @Prop({ type: [String], default: [] })
   specialties: string[];
 
   @Prop()

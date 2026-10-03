@@ -1,39 +1,41 @@
-import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
-import { ToastContainer } from 'react-toastify'
+import type { Metadata, Viewport } from 'next'
 import { Providers } from './providers'
+import ErrorBoundary from '@/components/ErrorBoundary'
+// Self-hosted so builds and dev servers never depend on reaching Google Fonts
+import '@fontsource-variable/inter'
+import '@fontsource/instrument-serif/400.css'
+import '@fontsource/instrument-serif/400-italic.css'
 import './globals.css'
-import 'react-toastify/dist/ReactToastify.css'
 
-const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Blood Donor & Alert System',
-  description: 'Connecting hospitals with blood donors through real-time alerts',
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'),
+  title: 'DonorConnect — Coordinated blood response',
+  description:
+    'DonorConnect coordinates blood donors instead of broadcasting to them: ranked invite waves with held slots, verified live request links, shortage forecasting and a rare-blood registry.',
+  manifest: '/manifest.json',
+  appleWebApp: { capable: true, statusBarStyle: 'default', title: 'DonorConnect' },
+  openGraph: {
+    title: 'DonorConnect — Coordinated blood response',
+    description: 'The right donors, the right number, at the right time.',
+    type: 'website',
+    locale: 'en_IN',
+  },
 }
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#F3ECE0',
+}
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
-        <Providers>
-          {children}
-          <ToastContainer
-            position="top-right"
-            autoClose={5000}
-            hideProgressBar={false}
-            newestOnTop={false}
-            closeOnClick
-            rtl={false}
-            pauseOnFocusLoss
-            draggable
-            pauseOnHover
-          />
-        </Providers>
+      <body>
+        <ErrorBoundary>
+          <Providers>{children}</Providers>
+        </ErrorBoundary>
       </body>
     </html>
   )

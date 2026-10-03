@@ -3,58 +3,61 @@ import {
   WebSocketServer,
   SubscribeMessage,
   OnGatewayConnection,
-  OnGatewayDisconnect,
+  MessageBody,
+  ConnectedSocket,
 } from '@nestjs/websockets';
+import { Logger } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
-import { UseGuards } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
+import { frontendUrls } from '../common/config';
 
 @WebSocketGateway({
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: frontendUrls(),
     credentials: true,
   },
 })
-export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class SocketGateway implements OnGatewayConnection {
+  private readonly logger = new Logger(SocketGateway.name);
+
   @WebSocketServer()
   server: Server;
 
-  private connectedUsers = new Map<string, string>(); // socketId -> userId
+  constructor(private jwtService: JwtService) {}
 
+  // Authenticated sockets join their own user room; anonymous sockets may only
+  // watch public request pages.
   handleConnection(client: Socket) {
-    console.log(`Client connected: ${client.id}`);
+    const token = client.handshake.auth?.token as string | undefined;
+    if (!token) return;
+    try {
+      const payload = this.jwtService.verify(token);
+      client.data.userId = String(payload.sub);
+      client.data.role = payload.role;
+      client.join(`user_${payload.sub}`);
+    } catch {
+      this.logger.debug(`Rejected socket token for ${client.id}`);
+      client.emit('auth_error', { message: 'Invalid token' });
+    }
   }
 
-  handleDisconnect(client: Socket) {
-    console.log(`Client disconnected: ${client.id}`);
-    this.connectedUsers.delete(client.id);
+  @SubscribeMessage('watchRequest')
+  watchRequest(@ConnectedSocket() client: Socket, @MessageBody() code: string) {
+    if (typeof code === 'string' && /^[A-Za-z0-9]{6,12}$/.test(code)) {
+      client.join(`request_${code}`);
+    }
   }
 
-  @SubscribeMessage('join')
-  handleJoin(client: Socket, payload: { userId: string; role: string }) {
-    this.connectedUsers.set(client.id, payload.userId);
-    
-    // Join role-specific room
-    client.join(`${payload.role}s`);
-    
-    // Join user-specific room
-    client.join(`user_${payload.userId}`);
-    
-    console.log(`User ${payload.userId} joined as ${payload.role}`);
+  @SubscribeMessage('unwatchRequest')
+  unwatchRequest(@ConnectedSocket() client: Socket, @MessageBody() code: string) {
+    if (typeof code === 'string') client.leave(`request_${code}`);
   }
 
-  // Emit new alert to all donors
-  emitNewAlert(alert: any) {
-    this.server.to('donors').emit('newAlert', alert);
+  toUser(userId: string, event: string, payload: unknown) {
+    this.server?.to(`user_${userId}`).emit(event, payload);
   }
 
-  // Emit alert response to specific hospital
-  emitAlertResponse(hospitalUserId: string, response: any) {
-    this.server.to(`user_${hospitalUserId}`).emit('alertResponse', response);
-  }
-
-  // Emit alert status update
-  emitAlertUpdate(alert: any) {
-    this.server.emit('alertUpdate', alert);
+  toPublicRequest(code: string, payload: unknown) {
+    this.server?.to(`request_${code}`).emit('request:update', payload);
   }
 }

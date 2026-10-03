@@ -26,9 +26,11 @@ export class NotificationsService {
     if (process.env.FIREBASE_ADMIN_SDK_KEY) {
       try {
         const serviceAccount = JSON.parse(process.env.FIREBASE_ADMIN_SDK_KEY);
-        admin.initializeApp({
-          credential: admin.credential.cert(serviceAccount),
-        });
+        if (!admin.apps.length) {
+          admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount),
+          });
+        }
       } catch (error) {
         this.logger.error('Failed to initialize Firebase Admin SDK', error);
       }
@@ -53,7 +55,7 @@ export class NotificationsService {
     } catch (error) {
       this.logger.error(`Failed to send SMS to ${to}:`, error);
       this.logger.log(`📱 SMS (Fallback): ${message} → ${to}`);
-      return true; // Return true even on error for development
+      return false;
     }
   }
 
@@ -79,7 +81,7 @@ export class NotificationsService {
     } catch (error) {
       this.logger.error(`Failed to send email to ${to}:`, error);
       this.logger.log(`📧 Email (Fallback): ${subject} → ${to}`);
-      return true; // Return true even on error for development
+      return false;
     }
   }
 
@@ -104,7 +106,7 @@ export class NotificationsService {
     } catch (error) {
       this.logger.error(`Failed to send push notification:`, error);
       this.logger.log(`🔔 Push (Fallback): ${title} - ${body}`);
-      return true; // Return true even on error for development
+      return false;
     }
   }
 
